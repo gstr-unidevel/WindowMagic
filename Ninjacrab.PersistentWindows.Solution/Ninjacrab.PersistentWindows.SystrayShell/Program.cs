@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using Ninjacrab.PersistentWindows.Common;
@@ -7,6 +8,9 @@ namespace Ninjacrab.PersistentWindows.SystrayShell
 {
     static class Program
     {
+        
+
+
         /// <summary>
         /// The main entry point for the application.
         /// </summary>
@@ -17,8 +21,7 @@ namespace Ninjacrab.PersistentWindows.SystrayShell
             Mutex singleInstMutex = new Mutex(true, Application.ProductName);
             if (!singleInstMutex.WaitOne(TimeSpan.Zero, true))
             {
-                MessageBox.Show($"Only one inst of {Application.ProductName} can be run!");
-                //Application.Exit();
+                MessageBox.Show($"Only one instance of {Application.ProductName} can be run!");
                 return;
             }
             else
@@ -27,34 +30,22 @@ namespace Ninjacrab.PersistentWindows.SystrayShell
             }
 #endif
 
-            StartSplashForm();
+           
 
-            PersistentWindowProcessor pwp = new PersistentWindowProcessor();
-            pwp.Start();
+            // Seriously - this makes people want to abandon tools like this... let's make it lean!
+            // StartSplashForm();
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            new SystrayForm();
-            Application.Run();
+            using (PersistentWindowProcessor pwp = new PersistentWindowProcessor())
+            {
+                pwp.Start();
+
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using (new SystrayForm())
+                {
+                    Application.Run();
+                }
+            }
         }
-
-        static void StartSplashForm()
-        {
-            var thread = new Thread(() => TimedSplashForm());
-            thread.IsBackground = false;
-            thread.Name = "StartSplashForm";
-            thread.Start();
-        }
-
-        static void TimedSplashForm()
-        {
-            var thread = new Thread(() => Application.Run(new SplashForm()));
-            thread.IsBackground = false;
-            thread.Name = "TimedSplashForm";
-            thread.Start();
-            Thread.Sleep(5000);
-            thread.Abort();
-        }
-
     }
 }

@@ -12,69 +12,106 @@ using Ninjacrab.PersistentWindows.Common.WinApiBridge;
 
 namespace Ninjacrab.PersistentWindows.Common
 {
-    public class PersistentWindowProcessor
+    public class PersistentWindowProcessor : IDisposable
     {
+        delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType,
+        IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr
+           hmodWinEventProc, WinEventDelegate lpfnWinEventProc, uint idProcess,
+           uint idThread, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+        const uint WINEVENT_OUTOFCONTEXT = 0;
+        const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
+        const uint EVENT_SYSTEM_CAPTUREEND = 0x0009;
+        const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
+        const uint EVENT_SYSTEM_MINIMIZEEND = 0x0017;
+
+
         // read and update this from a config file eventually
-        private const int MaxAppsMoveUpdate = 4;
-        private const int MaxAppsMoveDelay = 60; // accept massive app move in 60 seconds
-        private int pendingAppsMoveTimer = 0;
-        private int pendingAppMoveSum = 0;
         private Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = null;
         private object displayChangeLock = null;
 
-        public void Start()
+        EventHandler displaySettingsChangedHandler;
+        PowerModeChangedEventHandler powerModeChangedHandler;
+
+        IntPtr winEventsHookCaptureEnd;
+        WinEventDelegate winEventsCaptureEndDelegate;
+
+        private bool isRestoring = false;
+
+        public PersistentWindowProcessor()
         {
             monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
             displayChangeLock = new object();
-            CaptureApplicationsOnCurrentDisplays(initialCapture: true);
-
-            var thread = new Thread(InternalRun);
-            thread.IsBackground = true;
-            thread.Name = "PersistentWindowProcessor.InternalRun()";
-            thread.Start();
-
-            SystemEvents.DisplaySettingsChanged += 
-                (s, e) =>
-                {
-                    Log.Info("Display settings changed");
-                    BeginRestoreApplicationsOnCurrentDisplays();
-                };
-
-            SystemEvents.PowerModeChanged += 
-                (s, e) =>
-                {
-                    switch (e.Mode)
-                    {
-                        case PowerModes.Suspend:
-                            Log.Info("System Suspending");
-                            BeginCaptureApplicationsOnCurrentDisplays();
-                            break;
-
-                        case PowerModes.Resume:
-                            Log.Info("System Resuming");
-                            BeginRestoreApplicationsOnCurrentDisplays();
-                            break;
-                    }
-                };
-
+            this.CreateEventHandlers();
+            this.winEventsCaptureEndDelegate = new WinEventDelegate(WinEventProc);
         }
 
-
-        private void InternalRun()
+        public void Start()
         {
-            while(true)
+            CaptureApplicationsOnCurrentDisplays(initialCapture: true);
+
+            Log.Info("Attaching event handlers");
+            SystemEvents.DisplaySettingsChanged += this.displaySettingsChangedHandler;
+            SystemEvents.PowerModeChanged += this.powerModeChangedHandler;
+
+            // Listen for name change changes across all processes/threads on current desktop...
+            this.winEventsHookCaptureEnd = SetWinEventHook(EVENT_SYSTEM_CAPTUREEND, EVENT_SYSTEM_CAPTUREEND, IntPtr.Zero, this.winEventsCaptureEndDelegate, 0, 0, WINEVENT_OUTOFCONTEXT);
+
+            //IntPtr hhook2 = SetWinEventHook(EVENT_SYSTEM_CAPTUREEND, EVENT_SYSTEM_CAPTUREEND, IntPtr.Zero,
+            //    new WinEventDelegate(WinEventProc), 0, 0, WINEVENT_OUTOFCONTEXT);
+        }
+
+        void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        {
+            // Console.WriteLine("WinEvent received. Type: {0:x8}, Window: {1:x8}", eventType, hwnd.ToInt32());
+            BeginCaptureApplicationsOnCurrentDisplays();
+        }
+
+        private void CreateEventHandlers()
+        {
+            this.displaySettingsChangedHandler = (s, e) =>
             {
-                Thread.Sleep(1000);
-                CaptureApplicationsOnCurrentDisplays();
-            }
+                Log.Info("Display settings changed");
+                BeginRestoreApplicationsOnCurrentDisplays();
+            };
+
+            this.powerModeChangedHandler = (s, e) =>
+            {
+                switch (e.Mode)
+                {
+                    case PowerModes.Suspend:
+                        Log.Info("System Suspending");
+                        break;
+
+                    case PowerModes.Resume:
+                        Log.Info("System Resuming");
+                        BeginRestoreApplicationsOnCurrentDisplays();
+                        break;
+                }
+            };
         }
 
         private void BeginCaptureApplicationsOnCurrentDisplays()
         {
-            var thread = new Thread(() => CaptureApplicationsOnCurrentDisplays());
-            thread.IsBackground = true;
-            thread.Name = "PersistentWindowProcessor.BeginCaptureApplicationsOnCurrentDisplays()";
+            if (this.isRestoring)
+            {
+                Log.Info("Currently restoring windows.... ignored capture request..");
+                return;
+            }
+
+            var thread = new Thread(() => CaptureApplicationsOnCurrentDisplays())
+            {
+                IsBackground = true,
+                Name = "PersistentWindowProcessor.BeginCaptureApplicationsOnCurrentDisplays()"
+            };
             thread.Start();
+
         }
 
         private void CaptureApplicationsOnCurrentDisplays(string displayKey = null, bool initialCapture = false)
@@ -120,86 +157,33 @@ namespace Ninjacrab.PersistentWindows.Common
                     }
                 }
 
-                if (!initialCapture)
+                Log.Trace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", displayKey);
+
+                List<string> commitUpdateLog = new List<string>();
+                //for (int i = 0; i < maxUpdateCnt; i++)
+                for (int i = 0; i < updateApps.Count; i++)
                 {
-                    if (updateLogs.Count == 0 && pendingAppMoveSum == 0)
+                    ApplicationDisplayMetrics curDisplayMetrics = updateApps[i];
+                    commitUpdateLog.Add(updateLogs[i]);
+                    if (!monitorApplications[displayKey].ContainsKey(curDisplayMetrics.Key))
                     {
-                        return;
+                        monitorApplications[displayKey].Add(curDisplayMetrics.Key, curDisplayMetrics);
                     }
-
-                    ++pendingAppsMoveTimer;
-                    pendingAppMoveSum += updateLogs.Count;
-
-                    if (pendingAppsMoveTimer < 3)
+                    else
                     {
-                        // wait up to 3 seconds before commit update
-                        return;
+                        /*
+                        // partially update Normal position part of WindowPlacement
+                        WindowPlacement wp = monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement;
+                        wp.NormalPosition = curDisplayMetrics.WindowPlacement.NormalPosition;
+                        monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = wp;
+                        */
+                        monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = curDisplayMetrics.WindowPlacement;
+                        monitorApplications[displayKey][curDisplayMetrics.Key].ScreenPosition = curDisplayMetrics.ScreenPosition;
                     }
                 }
 
-                if (!initialCapture && pendingAppMoveSum > MaxAppsMoveUpdate * pendingAppsMoveTimer)
-                {
-                    // this is an undesirable status which could be caused by either of the following,
-                    // 1. a new rdp session attemp to move/resize ALL windows even for the same display settings.
-                    // 2. window pos/size recovery is incomplete due to lack of admin permission of this program.
-                    // 3. moving many windows using mouse too fast.
-
-                    // The remedy for issue 1
-                    // wait up to 60 seconds to give DisplaySettingsChanged event handler a chance to recover.
-                    if (pendingAppsMoveTimer < MaxAppsMoveDelay)
-                    {
-                        Log.Trace("Waiting for display setting recovery");
-                        return;
-                    }
-
-                    // the remedy for issue 2 and 3
-                    // acknowledge the status quo and proceed to recapture all windows
-                    initialCapture = true;
-                    Log.Trace("Full capture timer triggered");
-                }
-
-                if (pendingAppsMoveTimer != 0)
-                {
-                    Log.Trace("pending update timer value is {0}", pendingAppsMoveTimer);
-                }
-
-                int maxUpdateCnt = updateLogs.Count;
-                if (!initialCapture && maxUpdateCnt > MaxAppsMoveUpdate)
-                {
-                    maxUpdateCnt = MaxAppsMoveUpdate;
-                }
-
-                if (maxUpdateCnt > 0)
-                {
-                    Log.Trace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", displayKey);
-
-                    List<string> commitUpdateLog = new List<string>();
-                    for (int i = 0; i < maxUpdateCnt; i++)
-                    {
-                        ApplicationDisplayMetrics curDisplayMetrics = updateApps[i];
-                        commitUpdateLog.Add(updateLogs[i]);
-                        if (!monitorApplications[displayKey].ContainsKey(curDisplayMetrics.Key))
-                        {
-                            monitorApplications[displayKey].Add(curDisplayMetrics.Key, curDisplayMetrics);
-                        }
-                        else
-                        {
-                            /*
-                            // partially update Normal position part of WindowPlacement
-                            WindowPlacement wp = monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement;
-                            wp.NormalPosition = curDisplayMetrics.WindowPlacement.NormalPosition;
-                            monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = wp;
-                            */
-                            monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = curDisplayMetrics.WindowPlacement;
-                            monitorApplications[displayKey][curDisplayMetrics.Key].ScreenPosition = curDisplayMetrics.ScreenPosition;
-                        }
-                    }
-
-                    //commitUpdateLog.Sort();
-                    Log.Trace("{0}{1}{2} windows captured", string.Join(Environment.NewLine, commitUpdateLog), Environment.NewLine, commitUpdateLog.Count);
-                }
-                pendingAppsMoveTimer = 0;
-                pendingAppMoveSum = 0;
+                //commitUpdateLog.Sort();
+                Log.Trace("{0}{1}{2} windows captured", string.Join(Environment.NewLine, commitUpdateLog), Environment.NewLine, commitUpdateLog.Count);
             }
         }
 
@@ -308,21 +292,21 @@ namespace Ninjacrab.PersistentWindows.Common
         {
             var thread = new Thread(() => 
             {
+                if (this.isRestoring) return;
+                this.isRestoring = true; // Prevent any accidental re-reading of layout while we attempt to restore layout
+                Thread.Sleep(5000); // Must have time for built-in arrangement to settle.. wish there was a way to detect this..
                 try
                 {
                     lock (displayChangeLock)
                     {
                         RestoreApplicationsOnCurrentDisplays();
-                        Thread.Sleep(1000);
-                        RestoreApplicationsOnCurrentDisplays();
-
-                        CaptureApplicationsOnCurrentDisplays(initialCapture: true);
                     }
                 }
                 catch (Exception ex)
                 {
                     Log.Error(ex.ToString());
                 }
+                this.isRestoring = false;
             });
             thread.IsBackground = true;
             thread.Name = "PersistentWindowProcessor.RestoreApplicationsOnCurrentDisplays()";
@@ -331,6 +315,7 @@ namespace Ninjacrab.PersistentWindows.Common
 
         private void RestoreApplicationsOnCurrentDisplays(string displayKey = null)
         {
+
             lock (displayChangeLock)
             {
                 if (displayKey == null)
@@ -417,6 +402,49 @@ namespace Ninjacrab.PersistentWindows.Common
                 Log.Trace("Restored windows position for display setting {0}", displayKey);
             }
         }
+
+        #region IDisposable Support
+        private bool isDisposed = false; // To detect redundant calls
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!isDisposed)
+            {
+                if (disposing)
+                {
+                    if (this.displaySettingsChangedHandler != null)
+                    {
+                        SystemEvents.DisplaySettingsChanged -= this.displaySettingsChangedHandler;
+                    }
+                    if (this.powerModeChangedHandler != null)
+                    {
+                        SystemEvents.PowerModeChanged -= this.powerModeChangedHandler;
+                    }
+                }
+
+                if (this.winEventsHookCaptureEnd != default)
+                {
+                    UnhookWinEvent(winEventsHookCaptureEnd);
+                }
+
+                isDisposed = true;
+            }
+        }
+
+        ~PersistentWindowProcessor()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(false);
+        }
+
+        // This code added to correctly implement the disposable pattern.
+        void IDisposable.Dispose()
+        {
+            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
 
     }
 
