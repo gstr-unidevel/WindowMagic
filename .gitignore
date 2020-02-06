@@ -1,4 +1,8 @@
-Ninjacrab.PersistentWindows.Solution/.vs/
-Ninjacrab.PersistentWindows.Solution/**/bin/**
-Ninjacrab.PersistentWindows.Solution/**/obj/**
-Ninjacrab.PersistentWindows.Solution/packages/
+Source/.vs/
+Source/**/bin/**
+Source/**/obj/**
+Source/packages/
+Source/WindowMagic.Setup/Debug/
+Source/WindowMagic.Setup/Release/
+Source/UpgradeLog.htm
+*.user
