@@ -32,7 +32,7 @@ namespace WindowMagic.SystrayShell
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                using (new SystrayForm())
+                using (new SystrayForm(pwp))
                 {
                     Application.Run();
                 }

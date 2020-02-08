@@ -1,16 +1,18 @@
 ﻿using System;
 using System.Windows.Forms;
-using Ninjacrab.PersistentWindows.WpfShell;
+using WindowMagic.Common;
 using WindowMagic.WpfShell;
 
 namespace WindowMagic.SystrayShell
 {
     public partial class SystrayForm : Form
     {
+        private readonly PersistentWindowProcessor pwp;
         public MainWindow MainView { get; set; }
 
-        public SystrayForm()
+        public SystrayForm(PersistentWindowProcessor pwp)
         {
+            this.pwp = pwp;
             InitializeComponent();
         }
 
@@ -20,7 +22,7 @@ namespace WindowMagic.SystrayShell
             if (this.MainView == null ||
                 this.MainView.IsClosed)
             {
-                this.MainView = new MainWindow();
+                this.MainView = new MainWindow(pwp);
                 shouldShow = true;
             }
 

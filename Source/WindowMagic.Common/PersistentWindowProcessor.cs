@@ -16,14 +16,17 @@ namespace WindowMagic.Common
     {
         // read and update this from a config file eventually
         private Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = null;
+
+
+
         private object displayChangeLock = null;
 
         EventHandler displaySettingsChangedHandler;
         PowerModeChangedEventHandler powerModeChangedHandler;
 
         IntPtr winEventsHookCaptureEnd;
-        User32.WinEventDelegate winEventsCaptureEndDelegate;
-
+        User32.WinEventDelegate winEventsCaptureDelegate;
+        
         private bool isRestoring = false;
 
         public PersistentWindowProcessor()
@@ -31,7 +34,7 @@ namespace WindowMagic.Common
             monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
             displayChangeLock = new object();
             this.CreateEventHandlers();
-            this.winEventsCaptureEndDelegate = WinEventProc;
+            this.winEventsCaptureDelegate = WinEventProc;
         }
 
         public void Start()
@@ -42,23 +45,56 @@ namespace WindowMagic.Common
             SystemEvents.DisplaySettingsChanged += this.displaySettingsChangedHandler;
             SystemEvents.PowerModeChanged += this.powerModeChangedHandler;
 
-            // EVENT_SYSTEM_CAPTUREEND is the magic event that tells us when a window is selected / repositioned / everything (it seems!)
+            // Any movements around clicking/dragging
             this.winEventsHookCaptureEnd = User32.SetWinEventHook(
                 (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
                 (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
                 IntPtr.Zero,
-                this.winEventsCaptureEndDelegate,
+                this.winEventsCaptureDelegate,
                 0,
                 0,
                 (uint)User32Events.WINEVENT_OUTOFCONTEXT);
 
+            // This seems to cover most moves involving snaps and minmize/restore
+            this.winEventsHookCaptureEnd = User32.SetWinEventHook(
+                (uint)User32Events.EVENT_SYSTEM_FOREGROUND,
+                (uint)User32Events.EVENT_SYSTEM_FOREGROUND,
+                IntPtr.Zero,
+                this.winEventsCaptureDelegate,
+                0,
+                0,
+                (uint)User32Events.WINEVENT_OUTOFCONTEXT);
+
+            //this.winEventsHookCaptureEnd = User32.SetWinEventHook(
+            //    (uint)User32Events.EVENT_MIN,
+            //    (uint)User32Events.EVENT_MAX,
+            //    IntPtr.Zero,
+            //    new User32.WinEventDelegate(WinEventProcDebug), 
+            //    0,
+            //    0,
+            //    (uint)User32Events.WINEVENT_OUTOFCONTEXT);
+        }
+
+        /**
+         * For manual invocation
+         */
+        public void CaptureLayout()
+        {
+            BeginCaptureApplicationsOnCurrentDisplays();
         }
 
         private void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            // Console.WriteLine("WinEvent received. Type: {0:x8}, Window: {1:x8}", eventType, hwnd.ToInt32());
+            Log.Trace($"Capture triggered from WinEvent with eventType {eventType:x8}");
             BeginCaptureApplicationsOnCurrentDisplays();
         }
+
+        //private void WinEventProcDebug(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild,
+        //    uint dwEventThread, uint dwmsEventTime)
+        //{
+        //    if (eventType > 0x00007000) return;
+        //    Console.WriteLine("WinEvent received. Type: {0:x8}, Window: {1:x8}", eventType, hwnd.ToInt32());
+        //}
 
         private void CreateEventHandlers()
         {

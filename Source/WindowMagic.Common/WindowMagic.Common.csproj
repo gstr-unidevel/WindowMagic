@@ -77,6 +77,7 @@
     </Compile>
     <Compile Include="Models\ApplicationDisplayMetrics.cs" />
     <Compile Include="Models\DesktopDisplayMetrics.cs" />
+    <Compile Include="Models\LayoutSnapshot.cs" />
     <Compile Include="Models\WindowPositionInfo.cs" />
     <Compile Include="PersistentWindowProcessor.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

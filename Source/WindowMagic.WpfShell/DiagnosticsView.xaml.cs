@@ -1,37 +1,55 @@
 ﻿using System.Windows.Controls;
-using NLog;
+using WindowMagic.Common;
 using WindowMagic.Common.Diagnostics;
 
-namespace Ninjacrab.PersistentWindows.WpfShell
+namespace WindowMagic.WpfShell
 {
     /// <summary>
     /// Interaction logic for DiagnosticsView.xaml
     /// </summary>
     public partial class DiagnosticsView : UserControl
     {
-        private DiagnosticsViewModel viewModel;
+        private DiagnosticsViewModel DiagnosticsModel
+        {
+            get => this.DataContext as DiagnosticsViewModel;
+        }
 
         public DiagnosticsView()
         {
             InitializeComponent();
-            viewModel = new DiagnosticsViewModel();
-            this.DataContext = viewModel;
+            
             Log.LogEvent += (level, message) =>
                 {
-                    if (level != LogLevel.Trace)
+                    //if (level != LogLevel.Trace)
+                    //{
+
+                    this.Dispatcher.Invoke(() =>
                     {
-                        
-                        this.Dispatcher.Invoke(() =>
+                        var eventLog = DiagnosticsModel.EventLog;
+                        eventLog.Add(string.Format("{0}: {1}", level, message));
+                        if (DiagnosticsModel.EventLog.Count > 500)
                         {
-                            viewModel.EventLog.Add(string.Format("{0}: {1}", level, message));
-                            if (viewModel.EventLog.Count > 500)
-                            {
-                                viewModel.EventLog.RemoveAt(0);
-                            }
-                            eventLogList.ScrollIntoView(viewModel.EventLog[viewModel.EventLog.Count - 1]);
-                        });
-                    }
+                            eventLog.RemoveAt(0);
+                        }
+
+                        eventLogList.SelectedIndex = eventLogList.Items.Count - 1;
+                        eventLogList.ScrollIntoView(eventLogList.SelectedItem);
+                    });
+                    //}
                 };
+        }
+
+        private void ClearButton_Click(object sender, System.Windows.RoutedEventArgs e)
+        {
+            DiagnosticsModel.EventLog.Clear();
+        }
+
+        private void CaptureButton_Click(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (DataContext is PersistentWindowProcessor pwp)
+            {
+                Dispatcher?.Invoke(() => pwp.CaptureLayout());
+            }
         }
     }
 }
