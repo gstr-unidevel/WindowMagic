@@ -14,20 +14,32 @@ namespace WindowMagic.Common
 {
     public class PersistentWindowProcessor : IDisposable
     {
+        private const int DelayedCaptureTime = 3000;
+
         // read and update this from a config file eventually
-        private Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = null;
-
-
+        private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = null;
 
         private object displayChangeLock = null;
 
+        EventHandler displaySettingsChangingHandler;
         EventHandler displaySettingsChangedHandler;
         PowerModeChangedEventHandler powerModeChangedHandler;
 
-        IntPtr winEventsHookCaptureEnd;
-        User32.WinEventDelegate winEventsCaptureDelegate;
+        readonly List<IntPtr> winEventHookHandles = new List<IntPtr>();
+        private readonly User32.WinEventDelegate winEventsCaptureDelegate;
+        // private User32.WinEventDelegate winEventDebugDelegate;
         
         private bool isRestoring = false;
+
+        private bool isCapturing = false;
+
+        private bool ignoreCaptureRequests = false;
+
+        // Sets to true if a capture request occurs while we're currently capturing
+        private bool pendingCaptureRequest = false;
+
+        private Timer ignoreCaptureTimer;
+        private Timer delayedCaptureTimer;
 
         public PersistentWindowProcessor()
         {
@@ -35,6 +47,18 @@ namespace WindowMagic.Common
             displayChangeLock = new object();
             this.CreateEventHandlers();
             this.winEventsCaptureDelegate = WinEventProc;
+            // this.winEventDebugDelegate = WinEventProcDebug;
+
+            this.ignoreCaptureTimer = new Timer(state =>
+            {
+                Log.Trace("ignoreCaptureTimer done. Re-enabling capture requests.");
+                this.ignoreCaptureRequests = false;
+            });
+
+            this.delayedCaptureTimer = new Timer(state =>
+            {
+                this.CaptureApplicationsOnCurrentDisplays();
+            });
         }
 
         public void Start()
@@ -42,34 +66,46 @@ namespace WindowMagic.Common
             CaptureApplicationsOnCurrentDisplays(initialCapture: true);
 
             Log.Info("Attaching event handlers");
+            SystemEvents.DisplaySettingsChanging += this.displaySettingsChangingHandler;
             SystemEvents.DisplaySettingsChanged += this.displaySettingsChangedHandler;
             SystemEvents.PowerModeChanged += this.powerModeChangedHandler;
 
-            // Any movements around clicking/dragging
-            this.winEventsHookCaptureEnd = User32.SetWinEventHook(
-                (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
-                (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
+            // Movement or resizing of a window has finished
+            winEventHookHandles.Add(User32.SetWinEventHook(
+                (uint)User32Events.EVENT_SYSTEM_MOVESIZEEND,
+                (uint)User32Events.EVENT_SYSTEM_MOVESIZEEND,
                 IntPtr.Zero,
                 this.winEventsCaptureDelegate,
                 0,
                 0,
-                (uint)User32Events.WINEVENT_OUTOFCONTEXT);
+                (uint)User32Events.WINEVENT_OUTOFCONTEXT));
 
-            // This seems to cover most moves involving snaps and minmize/restore
-            this.winEventsHookCaptureEnd = User32.SetWinEventHook(
+            // This seems to cover most moves involving snaps and minimize / restore
+            winEventHookHandles.Add(User32.SetWinEventHook(
                 (uint)User32Events.EVENT_SYSTEM_FOREGROUND,
                 (uint)User32Events.EVENT_SYSTEM_FOREGROUND,
                 IntPtr.Zero,
                 this.winEventsCaptureDelegate,
                 0,
                 0,
-                (uint)User32Events.WINEVENT_OUTOFCONTEXT);
+                (uint)User32Events.WINEVENT_OUTOFCONTEXT));
+
+            // Any movements around clicking / dragging (in case it's missed by the other events)
+            winEventHookHandles.Add(User32.SetWinEventHook(
+                (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
+                (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
+                IntPtr.Zero,
+                this.winEventsCaptureDelegate,
+                0,
+                0,
+                (uint)User32Events.WINEVENT_OUTOFCONTEXT));
+
 
             //this.winEventsHookCaptureEnd = User32.SetWinEventHook(
             //    (uint)User32Events.EVENT_MIN,
             //    (uint)User32Events.EVENT_MAX,
             //    IntPtr.Zero,
-            //    new User32.WinEventDelegate(WinEventProcDebug), 
+            //    this.winEventDebugDelegate,
             //    0,
             //    0,
             //    (uint)User32Events.WINEVENT_OUTOFCONTEXT);
@@ -86,21 +122,34 @@ namespace WindowMagic.Common
         private void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
             Log.Trace($"Capture triggered from WinEvent with eventType {eventType:x8}");
-            BeginCaptureApplicationsOnCurrentDisplays();
+            RestartDelayedCapture();
         }
 
         //private void WinEventProcDebug(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild,
         //    uint dwEventThread, uint dwmsEventTime)
         //{
-        //    if (eventType > 0x00007000) return;
+        //    if (eventType == 0x0000800b || // EVENT_OBJECT_LOCATIONCHANGE
+        //        eventType == 0x0000800c || // EVENT_OBJECT_NAMECHANGE
+        //        eventType == 0x00008004 || // EVENT_OBJECT_REORDER
+        //        eventType == 0x0000800e ||
+        //        eventType >= 0x7500 && eventType <= 0x75FF) return;
+
         //    Console.WriteLine("WinEvent received. Type: {0:x8}, Window: {1:x8}", eventType, hwnd.ToInt32());
         //}
 
         private void CreateEventHandlers()
         {
+            this.displaySettingsChangingHandler = (s, e) =>
+            {
+                Log.Trace("Display settings changing handler invoked");
+                BeginIgnoringCaptureRequests(5000); // Ignore capture requests for this period
+                CancelDelayedCapture();
+                
+            };
+
             this.displaySettingsChangedHandler = (s, e) =>
             {
-                Log.Info("Display settings changed");
+                Log.Trace("Display settings changed");
                 BeginRestoreApplicationsOnCurrentDisplays();
             };
 
@@ -116,19 +165,76 @@ namespace WindowMagic.Common
                         Log.Info("System Resuming");
                         BeginRestoreApplicationsOnCurrentDisplays();
                         break;
+
+                    default:
+                        Log.Trace("Unhandled power mode change: {0}", nameof(e.Mode));
+                        break;
                 }
             };
         }
 
+        private void BeginIgnoringCaptureRequests(int timeoutMs)
+        {
+            Log.Trace("Ignoring capture requests...");
+            this.ignoreCaptureRequests = true;
+            this.ignoreCaptureTimer.Change(timeoutMs, Timeout.Infinite);
+        }
+
+        /**
+         * Primary method to begin a capture. Calling this multiple times will defer the capture, effectively
+         * preventing unnecessary processing. A "debouncing" technique.
+         */
+        private void RestartDelayedCapture()
+        {
+            Log.Trace("Beginning delayed capture...");
+            this.delayedCaptureTimer.Change(DelayedCaptureTime, Timeout.Infinite);
+        }
+
+        /**
+         * Under some circumstances (such as after display changes) we want to cancel any pending capture that
+         * may have triggered. This is most beneficial after display change to "throw away" any captures
+         * that were initiated by rogue events that happened before we are notified of the display settings change.
+         */
+        private void CancelDelayedCapture()
+        {
+            Log.Trace("Cancelling delayed capture");
+            this.delayedCaptureTimer.Change(Timeout.Infinite, Timeout.Infinite);
+        }
+
         private void BeginCaptureApplicationsOnCurrentDisplays()
         {
-            if (this.isRestoring)
+            if (this.ignoreCaptureRequests)
             {
-                Log.Info("Currently restoring windows.... ignored capture request..");
+                Log.Trace("Ignoring capture request... 'ignoreCaptureRequests' flag set");
                 return;
             }
 
-            var thread = new Thread(() => CaptureApplicationsOnCurrentDisplays())
+            if (this.isRestoring)
+            {
+                Log.Trace("Currently restoring windows.... ignored capture request..");
+                return;
+            }
+
+            if (this.isCapturing)
+            {
+                pendingCaptureRequest = true;
+                return;
+            }
+
+            this.isCapturing = true;
+
+            var thread = new Thread(() =>
+            {
+                CaptureApplicationsOnCurrentDisplays();
+                this.isCapturing = false;
+
+                if (this.pendingCaptureRequest)
+                {
+                    // If we had more changes during capture, this should be set to true, so we perform a follow-up capture.
+                    this.pendingCaptureRequest = false;
+                    this.BeginCaptureApplicationsOnCurrentDisplays();
+                }
+            })
             {
                 IsBackground = true,
                 Name = "PersistentWindowProcessor.BeginCaptureApplicationsOnCurrentDisplays()"
@@ -318,7 +424,7 @@ namespace WindowMagic.Common
                 if (this.isRestoring) return;
                 this.isRestoring = true; // Prevent any accidental re-reading of layout while we attempt to restore layout
 
-                Thread.Sleep(2000); // Must have time for built-in arrangement to settle.. wish there was a way to detect this..
+                //Thread.Sleep(2000); // Must have time for built-in arrangement to settle.. wish there was a way to detect this..
                 try
                 {
                     lock (displayChangeLock)
@@ -331,6 +437,9 @@ namespace WindowMagic.Common
                     Log.Error(ex.ToString());
                 }
                 this.isRestoring = false;
+                // Once restored, update our capture
+                this.BeginCaptureApplicationsOnCurrentDisplays();
+
             });
             thread.IsBackground = true;
             thread.Name = "PersistentWindowProcessor.RestoreApplicationsOnCurrentDisplays()";
@@ -434,9 +543,9 @@ namespace WindowMagic.Common
                     }
                 }
 
-                if (this.winEventsHookCaptureEnd != default)
+                foreach (var handle in this.winEventHookHandles)
                 {
-                    User32.UnhookWinEvent(winEventsHookCaptureEnd);
+                    User32.UnhookWinEvent(handle);
                 }
 
                 isDisposed = true;

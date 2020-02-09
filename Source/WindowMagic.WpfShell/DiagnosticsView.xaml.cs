@@ -1,4 +1,5 @@
-﻿using System.Windows.Controls;
+﻿using System;
+using System.Windows.Controls;
 using WindowMagic.Common;
 using WindowMagic.Common.Diagnostics;
 
@@ -23,20 +24,23 @@ namespace WindowMagic.WpfShell
                     //if (level != LogLevel.Trace)
                     //{
 
-                    this.Dispatcher.Invoke(() =>
+                    this.Dispatcher.InvokeAsync(() =>
                     {
                         var eventLog = DiagnosticsModel.EventLog;
-                        eventLog.Add(string.Format("{0}: {1}", level, message));
+                        eventLog.Add(string.Format("{0}: [{1}]: {2}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"), level, message));
+                        
                         if (DiagnosticsModel.EventLog.Count > 500)
                         {
                             eventLog.RemoveAt(0);
                         }
 
+
                         eventLogList.SelectedIndex = eventLogList.Items.Count - 1;
-                        eventLogList.ScrollIntoView(eventLogList.SelectedItem);
+                        eventLogList.ScrollIntoView(eventLogList.Items[eventLogList.Items.Count - 1]);
+
                     });
                     //}
-                };
+            };
         }
 
         private void ClearButton_Click(object sender, System.Windows.RoutedEventArgs e)

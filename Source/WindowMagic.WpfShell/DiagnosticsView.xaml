@@ -6,6 +6,6 @@
              xmlns:prism="http://www.codeplex.com/prism"
              mc:Ignorable="d" Height="360" Width="476.8">
     <Grid>
-        <ListBox Name="eventLogList" ItemsSource="{Binding EventLog}" Margin="10,39.92,10,10" />
+        <ListView Name="eventLogList" ItemsSource="{Binding EventLog}" Margin="10,39.92,10,10" ScrollViewer.VerticalScrollBarVisibility="Visible" />
     </Grid>
 </UserControl>
