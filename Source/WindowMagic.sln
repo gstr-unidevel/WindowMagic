@@ -14,7 +14,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowMagic.Common", "Windo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowMagic.SystrayShell", "WindowMagic.SystrayShell\WindowMagic.SystrayShell.csproj", "{A728279C-F567-4E54-8BC6-90A66DC3EF57}"
 EndProject
-Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "PersistentWindowsSetup", "WindowMagic.Setup\PersistentWindowsSetup.vdproj", "{08377204-0D43-4050-ACB0-CC1FAFB5E612}"
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "WindowMagicSetup", "WindowMagic.Setup\PersistentWindowsSetup.vdproj", "{08377204-0D43-4050-ACB0-CC1FAFB5E612}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{FFDE5EDF-B678-47DF-A815-F007AEA0A5F9}"
+	ProjectSection(SolutionItems) = preProject
+		SharedAssemblyInfo.cs = SharedAssemblyInfo.cs
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

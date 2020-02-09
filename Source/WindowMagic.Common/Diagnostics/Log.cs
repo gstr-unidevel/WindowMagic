@@ -55,10 +55,7 @@ namespace WindowMagic.Common.Diagnostics
         private static void RaiseLogEvent(LogLevel level, string message)
         {
             // could, should, would write a new logging target but this is brute force faster
-            if(LogEvent != null)
-            {
-                LogEvent(level, message);
-            }
+            LogEvent?.Invoke(level, message);
         }
 
         public static void Trace(string format, params object[] args)
