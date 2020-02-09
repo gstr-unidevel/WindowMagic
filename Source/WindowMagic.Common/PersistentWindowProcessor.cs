@@ -424,7 +424,7 @@ namespace WindowMagic.Common
                 if (this.isRestoring) return;
                 this.isRestoring = true; // Prevent any accidental re-reading of layout while we attempt to restore layout
 
-                //Thread.Sleep(2000); // Must have time for built-in arrangement to settle.. wish there was a way to detect this..
+                Thread.Sleep(1000); // Must have time for built-in arrangement to settle.. wish there was a way to detect this..
                 try
                 {
                     lock (displayChangeLock)
