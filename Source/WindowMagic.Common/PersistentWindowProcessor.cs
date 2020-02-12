@@ -57,7 +57,7 @@ namespace WindowMagic.Common
 
             this.delayedCaptureTimer = new Timer(state =>
             {
-                this.CaptureApplicationsOnCurrentDisplays();
+                this.BeginCaptureApplicationsOnCurrentDisplays();
             });
         }
 
@@ -69,6 +69,11 @@ namespace WindowMagic.Common
             SystemEvents.DisplaySettingsChanging += this.displaySettingsChangingHandler;
             SystemEvents.DisplaySettingsChanged += this.displaySettingsChangedHandler;
             SystemEvents.PowerModeChanged += this.powerModeChangedHandler;
+            //SystemEvents.SessionSwitch += new SessionSwitchEventHandler((sender, args) =>
+            //{
+            //    Log.Info($"Session switch system event triggered. Reason: {args.Reason}");
+                
+            //});
 
             // Movement or resizing of a window has finished
             winEventHookHandles.Add(User32.SetWinEventHook(
@@ -121,7 +126,7 @@ namespace WindowMagic.Common
 
         private void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
         {
-            Log.Trace($"Capture triggered from WinEvent with eventType {eventType:x8}");
+            // Log.Trace($"Capture triggered from WinEvent with eventType {eventType:x8}");
             RestartDelayedCapture();
         }
 
@@ -142,15 +147,19 @@ namespace WindowMagic.Common
             this.displaySettingsChangingHandler = (s, e) =>
             {
                 Log.Trace("Display settings changing handler invoked");
-                BeginIgnoringCaptureRequests(5000); // Ignore capture requests for this period
-                CancelDelayedCapture();
-                
+                // BeginIgnoringCaptureRequests(5000); // Ignore capture requests for this period
+                IgnoreCaptureUntilWindowsStable();
             };
 
             this.displaySettingsChangedHandler = (s, e) =>
             {
                 Log.Trace("Display settings changed");
-                BeginRestoreApplicationsOnCurrentDisplays();
+                StateDetector.WaitForWindowStabilization(() =>
+                {
+                    CancelDelayedCapture(); // Throw away any pending captures
+                    ignoreCaptureRequests = true; // Ignore any capture requests until we restore
+                    BeginRestoreApplicationsOnCurrentDisplays();
+                });
             };
 
             this.powerModeChangedHandler = (s, e) =>
@@ -177,7 +186,18 @@ namespace WindowMagic.Common
         {
             Log.Trace("Ignoring capture requests...");
             this.ignoreCaptureRequests = true;
-            this.ignoreCaptureTimer.Change(timeoutMs, Timeout.Infinite);
+            
+        }
+
+        private void IgnoreCaptureUntilWindowsStable()
+        {
+            Log.Trace("Ignoring captures until windows stabilize...");
+            this.ignoreCaptureRequests = true;
+            StateDetector.WaitForWindowStabilization(() =>
+            {
+                Log.Trace("Windows stabilized. Resuming allow capture of window positions.");
+                this.ignoreCaptureRequests = false;
+            }, 500);
         }
 
         /**
@@ -186,7 +206,7 @@ namespace WindowMagic.Common
          */
         private void RestartDelayedCapture()
         {
-            Log.Trace("Beginning delayed capture...");
+            // Log.Trace("Beginning delayed capture...");
             this.delayedCaptureTimer.Change(DelayedCaptureTime, Timeout.Infinite);
         }
 
@@ -225,15 +245,18 @@ namespace WindowMagic.Common
 
             var thread = new Thread(() =>
             {
-                CaptureApplicationsOnCurrentDisplays();
-                this.isCapturing = false;
-
-                if (this.pendingCaptureRequest)
+                StateDetector.WaitForWindowStabilization(() =>
                 {
-                    // If we had more changes during capture, this should be set to true, so we perform a follow-up capture.
-                    this.pendingCaptureRequest = false;
-                    this.BeginCaptureApplicationsOnCurrentDisplays();
-                }
+                    CaptureApplicationsOnCurrentDisplays();
+                    this.isCapturing = false;
+
+                    if (this.pendingCaptureRequest)
+                    {
+                        // If we had more changes during capture, this should be set to true, so we perform a follow-up capture.
+                        this.pendingCaptureRequest = false;
+                        this.BeginCaptureApplicationsOnCurrentDisplays();
+                    }
+                }, 2000);
             })
             {
                 IsBackground = true,
@@ -260,7 +283,7 @@ namespace WindowMagic.Common
 
                 List<string> updateLogs = new List<string>();
                 List<ApplicationDisplayMetrics> updateApps = new List<ApplicationDisplayMetrics>();
-                var appWindows = CaptureWindowsOfInterest();
+                var appWindows =  WindowHelper.CaptureWindowsOfInterest();
                 foreach (var window in appWindows)
                 {
                     ApplicationDisplayMetrics curDisplayMetrics = null;
@@ -314,17 +337,6 @@ namespace WindowMagic.Common
                 //commitUpdateLog.Sort();
                 Log.Trace("{0}{1}{2} windows captured", string.Join(Environment.NewLine, commitUpdateLog), Environment.NewLine, commitUpdateLog.Count);
             }
-        }
-
-        private IEnumerable<SystemWindow> CaptureWindowsOfInterest()
-        {
-            return SystemWindow.AllToplevelWindows
-                                .Where(row => row.Parent.HWnd.ToInt64() == 0
-                                    && !string.IsNullOrEmpty(row.Title)
-                                    //&& !row.Title.Equals("Program Manager")
-                                    //&& !row.Title.Contains("Task Manager")
-                                    && row.Visible
-                                    );
         }
 
         private bool NeedUpdateWindow(string displayKey, SystemWindow window, out ApplicationDisplayMetrics curDisplayMetrics)
@@ -424,7 +436,6 @@ namespace WindowMagic.Common
                 if (this.isRestoring) return;
                 this.isRestoring = true; // Prevent any accidental re-reading of layout while we attempt to restore layout
 
-                Thread.Sleep(1000); // Must have time for built-in arrangement to settle.. wish there was a way to detect this..
                 try
                 {
                     lock (displayChangeLock)
@@ -438,6 +449,7 @@ namespace WindowMagic.Common
                 }
                 this.isRestoring = false;
                 // Once restored, update our capture
+                this.ignoreCaptureRequests = false;
                 this.BeginCaptureApplicationsOnCurrentDisplays();
 
             });
@@ -466,7 +478,7 @@ namespace WindowMagic.Common
                 }
 
                 Log.Info("Restoring applications for {0}", displayKey);
-                foreach (var window in CaptureWindowsOfInterest())
+                foreach (var window in WindowHelper.CaptureWindowsOfInterest())
                 {
                     var proc_name = window.Process.ProcessName;
                     if (proc_name.Contains("CodeSetup"))

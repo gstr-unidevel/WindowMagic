@@ -39,5 +39,9 @@ namespace WindowMagic.SystrayShell
             Application.Exit();
         }
 
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+        }
     }
 }
