@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
-using System.Threading.Tasks;
 using ManagedWinapi.Windows;
 using WindowMagic.Common.Diagnostics;
-using static System.Threading.Tasks.Task;
 
 namespace WindowMagic.Common
 {

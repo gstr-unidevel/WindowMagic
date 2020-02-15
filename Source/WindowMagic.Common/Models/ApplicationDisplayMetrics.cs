@@ -30,19 +30,8 @@ namespace WindowMagic.Common.Models
 
         public bool EqualPlacement(ApplicationDisplayMetrics other)
         {
-            /*
-            return this.WindowPlacement.NormalPosition.Left == other.WindowPlacement.NormalPosition.Left
-                && this.WindowPlacement.NormalPosition.Top == other.WindowPlacement.NormalPosition.Top
-                && this.WindowPlacement.NormalPosition.Width == other.WindowPlacement.NormalPosition.Width
-                && this.WindowPlacement.NormalPosition.Height == other.WindowPlacement.NormalPosition.Height;
-            */
-            /*
-            bool posEqual = this.WindowPlacement.NormalPosition.Equals(other.WindowPlacement.NormalPosition);
-            bool minmaxStateEqual = this.WindowPlacement.ShowCmd == other.WindowPlacement.ShowCmd;
-            return posEqual && minmaxStateEqual;
-            */
-            return this.WindowPlacement.NormalPosition.Equals(other.WindowPlacement.NormalPosition);
-            //return this.WindowPlacement.Equals(other.WindowPlacement);
+            return this.WindowPlacement.NormalPosition.Equals(other.WindowPlacement.NormalPosition) &&
+                   this.WindowPlacement.ShowCmd == other.WindowPlacement.ShowCmd;
         }
 
         public override string ToString()
