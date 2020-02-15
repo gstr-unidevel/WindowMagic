@@ -93,7 +93,8 @@ namespace WindowMagic.Common.Diagnostics
         /// <returns></returns>
         private static string Format(string format, params object[] args)
         {
-            return args == null || args.Length == 0 ? format : string.Format(format, args);
+            var message = args == null || args.Length == 0 ? format : string.Format(format, args);
+            return $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
         }
     }
 }

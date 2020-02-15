@@ -1938,7 +1938,7 @@
             {
             "AssemblyRegister" = "3:1"
             "AssemblyIsInGAC" = "11:FALSE"
-            "AssemblyAsmDisplayName" = "8:WindowMagic.Common, Version=0.1.0.0, Culture=neutral, processorArchitecture=MSIL"
+            "AssemblyAsmDisplayName" = "8:WindowMagic.Common, Version=0.2.0.0, Culture=neutral, processorArchitecture=MSIL"
                 "ScatterAssemblies"
                 {
                     "_84645BDF2E500DC5C218DB457ED23B8F"
@@ -2682,7 +2682,7 @@
             {
             "AssemblyRegister" = "3:1"
             "AssemblyIsInGAC" = "11:FALSE"
-            "AssemblyAsmDisplayName" = "8:WindowMagic.WpfShell, Version=0.1.0.0, Culture=neutral, processorArchitecture=MSIL"
+            "AssemblyAsmDisplayName" = "8:WindowMagic.WpfShell, Version=0.2.0.0, Culture=neutral, processorArchitecture=MSIL"
                 "ScatterAssemblies"
                 {
                     "_F0EE363B7E238C933B4D144D295CE45E"
@@ -2869,15 +2869,15 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:WindowMagic"
-        "ProductCode" = "8:{5D68C4B1-C5CE-432E-ABEA-29D7DBFC0ECC}"
-        "PackageCode" = "8:{11A291E8-614B-4608-8DBB-B1133FB9FBD0}"
+        "ProductCode" = "8:{3BE34113-DBEF-4822-8ED5-0F0A0DB4C693}"
+        "PackageCode" = "8:{7F2B801C-AC34-4FBC-BC3F-DE18E794148F}"
         "UpgradeCode" = "8:{1DC59CB4-D98C-4196-97B2-86FEE30C06A2}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:FALSE"
-        "ProductVersion" = "8:0.2.0"
+        "ProductVersion" = "8:0.3.0"
         "Manufacturer" = "8:Open Source Community"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"

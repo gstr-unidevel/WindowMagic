@@ -10,7 +10,7 @@ namespace WindowMagic.Common
 {
     internal static class StateDetector
     {
-        private const int StabilizationWaitInterval = 1000;
+        private const int StabilizationWaitInterval = 500;
 
         public static void WaitForWindowStabilization(Action completeCallback, int additionalDelayInMs = 0)
         {

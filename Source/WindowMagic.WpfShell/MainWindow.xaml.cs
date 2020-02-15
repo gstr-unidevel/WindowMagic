@@ -33,7 +33,7 @@ namespace WindowMagic.WpfShell
 
         private void CaptureButton_Click(object sender, RoutedEventArgs e)
         {
-            this.Pwp.CaptureLayout();
+            this.Pwp.ForceCaptureLayout();
         }
     }
 }

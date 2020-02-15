@@ -27,7 +27,7 @@ namespace WindowMagic.WpfShell
                     this.Dispatcher.InvokeAsync(() =>
                     {
                         var eventLog = DiagnosticsModel.EventLog;
-                        eventLog.Add(string.Format("{0}: [{1}]: {2}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"), level, message));
+                        eventLog.Add(string.Format("[{0}]: {1}", level, message));
                         
                         if (DiagnosticsModel.EventLog.Count > 500)
                         {
@@ -52,7 +52,7 @@ namespace WindowMagic.WpfShell
         {
             if (DataContext is PersistentWindowProcessor pwp)
             {
-                Dispatcher?.Invoke(() => pwp.CaptureLayout());
+                Dispatcher?.Invoke(() => pwp.ForceCaptureLayout());
             }
         }
     }
