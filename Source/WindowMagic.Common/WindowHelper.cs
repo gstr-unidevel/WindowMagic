@@ -19,9 +19,10 @@ namespace WindowMagic.Common
                         DwmApi.DwmGetWindowAttribute(row.HWnd, (int) DwmApi.DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, out result, sizeof(int));
 
                     var resFlag = (DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON) result.ToInt32();
-                    bool isCloaked = resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_APP) ||
-                                     resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_INHERITED) ||
-                                     resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_SHELL);
+                    bool isCloaked = resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_APP) 
+                                     || resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_INHERITED) 
+                                     //|| resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_SHELL) // otherwise windows on other virtual desktops are not restored
+                                     ;
 
                     return row.Parent.HWnd.ToInt64() == 0
                            && !string.IsNullOrEmpty(row.Title)
