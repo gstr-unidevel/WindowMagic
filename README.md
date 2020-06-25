@@ -1,5 +1,15 @@
 # WindowMagic
-The code is forked from https://github.com/kangyu-california/PersistentWindows which is forked from http://www.ninjacrab.com/persistent-windows/. I renamed to *"WindowMagic"* since it's such a major refactor.
+The code is forked from https://github.com/CleverCoder/WindowMagic which is forked from https://github.com/kangyu-california/PersistentWindows which is forked from http://www.ninjacrab.com/persistent-windows/. 
+
+# Changes
+
+* Support for virtual desktops (windows will be restored on non-active desktops too)
+* Some timeouts have been enhanced to support setups like Dell P2715Q
+
+# Clever coder description
+
+I renamed to *"WindowMagic"* since it's such a major refactor.
+
 Differences:
 * Event-driven window position detection loop, rather than polling. Uses almost zero machine resources.
 * No splash screen
