@@ -14,20 +14,18 @@ namespace WindowMagic.Common
             return SystemWindow.AllToplevelWindows
                 .Where(row =>
                 {
-                    IntPtr result;
-                    var success =
-                        DwmApi.DwmGetWindowAttribute(row.HWnd, (int) DwmApi.DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, out result, sizeof(int));
-
+                    var success = DwmApi.DwmGetWindowAttribute(row.HWnd, (int) DwmApi.DWMWINDOWATTRIBUTE.DWMWA_CLOAKED, out IntPtr result, sizeof(int));
+                    
                     var resFlag = (DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON) result.ToInt32();
                     bool isCloaked = resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_APP) 
                                      || resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_INHERITED) 
                                      //|| resFlag.HasFlag(DwmApi.DWM_WINDOW_ATTR_CLOAKED_REASON.DWM_CLOAKED_SHELL) // otherwise windows on other virtual desktops are not restored
                                      ;
-
+                    
                     return row.Parent.HWnd.ToInt64() == 0
                            && !string.IsNullOrEmpty(row.Title)
                            && !isCloaked
-                           //&& !row.Title.Equals("Program Manager")
+                           // && !row.Title.Equals("Program Manager")
                            //&& !row.Title.Contains("Task Manager")
                            && row.Visible;
                 });

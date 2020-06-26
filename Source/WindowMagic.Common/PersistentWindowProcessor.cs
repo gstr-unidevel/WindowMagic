@@ -14,7 +14,7 @@ namespace WindowMagic.Common
 {
     public class PersistentWindowProcessor : IDisposable
     {
-        private const int DelayedCaptureTime = 2000;
+        private const int DelayedCaptureTime = 3500;
 
         // read and update this from a config file eventually
         private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = null;
@@ -301,6 +301,7 @@ namespace WindowMagic.Common
                 List<string> updateLogs = new List<string>();
                 List<ApplicationDisplayMetrics> updateApps = new List<ApplicationDisplayMetrics>();
                 var appWindows =  WindowHelper.CaptureWindowsOfInterest();
+                
                 foreach (var window in appWindows)
                 {
                     ApplicationDisplayMetrics curDisplayMetrics = null;
