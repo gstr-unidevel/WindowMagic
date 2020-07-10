@@ -26,9 +26,8 @@ namespace WindowMagic.Common
         private PowerModeChangedEventHandler powerModeChangedHandler;
         private SessionSwitchEventHandler sessionSwitchEventHandler;
 
-        readonly List<IntPtr> winEventHookHandles = new List<IntPtr>();
+        private readonly List<IntPtr> winEventHookHandles = new List<IntPtr>();
         private readonly User32.WinEventDelegate winEventsCaptureDelegate;
-        // private User32.WinEventDelegate winEventDebugDelegate;
 
         private bool isSessionLocked = false;
         private bool isRestoring = false;
