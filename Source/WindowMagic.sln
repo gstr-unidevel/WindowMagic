@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29728.190
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowMagic.WpfShell", "WindowMagic.WpfShell\WindowMagic.WpfShell.csproj", "{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{FA5C1FB9-45F3-434F-9176-71A2D8EDA5B2}"
 	ProjectSection(SolutionItems) = preProject
 		.nuget\packages.config = .nuget\packages.config
@@ -29,14 +27,6 @@ Global
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Debug|x64.ActiveCfg = Debug|x64
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Debug|x64.Build.0 = Debug|x64
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Release|x64.ActiveCfg = Release|x64
-		{4EA12EC8-B50F-4DEA-AA7D-85A5F4C81F83}.Release|x64.Build.0 = Release|x64
 		{4CC8B3FB-214B-42AB-8AAE-E7DC5E266EF0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4CC8B3FB-214B-42AB-8AAE-E7DC5E266EF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4CC8B3FB-214B-42AB-8AAE-E7DC5E266EF0}.Debug|x64.ActiveCfg = Debug|x64
