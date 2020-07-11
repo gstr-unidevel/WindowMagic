@@ -97,7 +97,6 @@
     <Compile Include="WinApiBridge\WindowsMessage.cs" />
     <Compile Include="WinApiBridge\WindowsPosition.cs" />
     <Compile Include="WinApiBridge\WinUserConstants.cs" />
-    <Compile Include="WindowHelper.cs" />
     <Compile Include="WindowService.cs" />
   </ItemGroup>
   <ItemGroup>

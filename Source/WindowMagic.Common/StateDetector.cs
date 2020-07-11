@@ -15,10 +15,12 @@ namespace WindowMagic.Common
     {
         private const int STABILIZATION_WAIT_INTERVAL = 2500; // with value of 500 restoration started to early on some setups
         
+        private readonly IWindowService _windowService;
         private readonly ILogger<StateDetector> _logger;
 
-        public StateDetector(ILogger<StateDetector> logger)
+        public StateDetector(IWindowService windowService, ILogger<StateDetector> logger)
         {
+            _windowService = windowService ?? throw new ArgumentNullException(nameof(windowService));
             _logger = logger;
         }
 
@@ -29,7 +31,7 @@ namespace WindowMagic.Common
 
             if (previousLocations.Count == 0)
             {
-                var windows = WindowHelper.CaptureWindowsOfInterest();
+                var windows = _windowService.CaptureWindowsOfInterest();
                 getWindowLocations(previousLocations, windows);
             }
 
@@ -38,7 +40,7 @@ namespace WindowMagic.Common
                 _logger?.LogTrace("Windows not stable, waiting...");
                 //await Delay(100);
                 Thread.Sleep(STABILIZATION_WAIT_INTERVAL);
-                var windows = WindowHelper.CaptureWindowsOfInterest();
+                var windows = _windowService.CaptureWindowsOfInterest();
                 getWindowLocations(currentLocations, windows);
 
                 if (doLocationsMatch(previousLocations, currentLocations))

@@ -24,7 +24,7 @@ namespace WindowMagic.Common
         private readonly object _displayChangeLock = new object();
         private readonly IDesktopService _desktopService;
         private readonly IStateDetector _stateDetector;
-        private readonly IWindowService _windowPositionService;
+        private readonly IWindowService _windowService;
         private readonly ILogger<PersistentWindowProcessor> _logger;
 
         private readonly Timer _delayedCaptureTimer;
@@ -41,7 +41,7 @@ namespace WindowMagic.Common
         {
             _desktopService = desktopService ?? throw new ArgumentNullException(nameof(desktopService));
             _stateDetector = stateDetector ?? throw new ArgumentNullException(nameof(stateDetector));
-            _windowPositionService = windowPositionService ?? throw new ArgumentNullException(nameof(windowPositionService));
+            _windowService = windowPositionService ?? throw new ArgumentNullException(nameof(windowPositionService));
             _logger = logger;
 
             _delayedCaptureTimer = new Timer(state =>
@@ -73,7 +73,7 @@ namespace WindowMagic.Common
             SystemEvents.DisplaySettingsChanged += displaySettingsChangedHandler;
             SystemEvents.PowerModeChanged += powerModeChangedHandler;
             SystemEvents.SessionSwitch += sessionSwitchEventHandler;
-            _windowPositionService.WindowPositionsChanged += windowPositionChangedHandler;
+            _windowService.WindowPositionsChanged += windowPositionChangedHandler;
 
             _logger?.LogInformation("Event handlers attach completed.");
         }
@@ -86,7 +86,7 @@ namespace WindowMagic.Common
             SystemEvents.DisplaySettingsChanged -= displaySettingsChangedHandler;
             SystemEvents.PowerModeChanged -= powerModeChangedHandler;
             SystemEvents.SessionSwitch -= sessionSwitchEventHandler;
-            _windowPositionService.WindowPositionsChanged -= windowPositionChangedHandler;
+            _windowService.WindowPositionsChanged -= windowPositionChangedHandler;
 
             _logger?.LogInformation("Event handlers detach completed.");
         }
@@ -229,7 +229,7 @@ namespace WindowMagic.Common
 
                 List<string> updateLogs = new List<string>();
                 List<ApplicationDisplayMetrics> updateApps = new List<ApplicationDisplayMetrics>();
-                var appWindows =  WindowHelper.CaptureWindowsOfInterest();
+                var appWindows =  _windowService.CaptureWindowsOfInterest();
                 
                 foreach (var window in appWindows)
                 {
@@ -407,7 +407,7 @@ namespace WindowMagic.Common
                 }
 
                 _logger?.LogInformation("Restoring applications for {0}", desktopKey);
-                foreach (var window in WindowHelper.CaptureWindowsOfInterest())
+                foreach (var window in _windowService.CaptureWindowsOfInterest())
                 {
                     var procName = window.Process.ProcessName;
                     if (procName.Contains("CodeSetup")) // SFA: What's this about??? seems almost too specific!
