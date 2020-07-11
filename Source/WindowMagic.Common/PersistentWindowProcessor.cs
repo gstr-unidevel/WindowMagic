@@ -30,7 +30,7 @@ namespace WindowMagic.Common
         private readonly Timer _delayedCaptureTimer;
 
         private bool _isSessionLocked = false;
-        private bool _isRestoring = false;
+        private bool _isRestorePending = false;
 
         /// <summary>
         /// Force ignoring capture requests. Typically done between first point where restore needed and when restore completes.
@@ -111,10 +111,10 @@ namespace WindowMagic.Common
 
         private void displaySettingsChangingHandler(object sender, EventArgs args)
         {
-                _logger?.LogTrace("Display settings changing handler invoked");
-                _ignoreCaptureRequests = true;
+            _logger?.LogTrace("Display settings changing handler invoked");
+            _ignoreCaptureRequests = true;
 
-                cancelDelayedCapture(); // Throw away any pending captures
+            cancelDelayedCapture(); // Throw away any pending captures
         }
 
         private void displaySettingsChangedHandler(object sender, EventArgs args)
@@ -130,7 +130,7 @@ namespace WindowMagic.Common
 
         private bool isCaptureAllowed()
         {
-            return !(_isSessionLocked || _ignoreCaptureRequests || _isRestoring);
+            return !(_isSessionLocked || _ignoreCaptureRequests || _isRestorePending);
         }
 
         private void powerModeChangedHandler(object sender, PowerModeChangedEventArgs e)
@@ -227,8 +227,8 @@ namespace WindowMagic.Common
         }
 
         private void captureApplicationsOnCurrentDisplays(string desktopKey = null, bool initialCapture = false)
-        {            
-            lock(_displayChangeLock)
+        {
+            lock (_displayChangeLock)
             {
                 if (desktopKey == null) desktopKey = _desktopService.GetDesktopKey();
 
@@ -240,8 +240,8 @@ namespace WindowMagic.Common
 
                 var updateLogs = new List<string>();
                 var updateApps = new List<ApplicationDisplayMetrics>();
-                var appWindows =  _windowService.CaptureWindowsOfInterest();
-                
+                var appWindows = _windowService.CaptureWindowsOfInterest();
+
                 foreach (var window in appWindows)
                 {
                     if (hasWindowChanged(desktopKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
@@ -271,7 +271,7 @@ namespace WindowMagic.Common
                 _logger?.LogTrace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", desktopKey);
 
                 List<string> commitUpdateLog = new List<string>();
-                
+
                 for (int i = 0; i < updateApps.Count; i++)
                 {
                     ApplicationDisplayMetrics curDisplayMetrics = updateApps[i];
@@ -361,25 +361,27 @@ namespace WindowMagic.Common
 
         private void beginRestoreApplicationsOnCurrentDisplays()
         {
-            if (_isRestoring) return;
-            
-            _isRestoring = true; // Prevent any accidental re-reading of layout while we attempt to restore layout
+            if (_isRestorePending) return;
+
+            _isRestorePending = true; // Prevent any accidental re-reading of layout while we attempt to restore layout
 
             var thread = new Thread(() =>
             {
                 try
                 {
-                    _stateDetector.WaitForWindowStabilization(() =>
-                    {
-                        restoreApplicationsOnCurrentDisplays();
-                    });
+                    _logger?.LogInformation("Restore started.");
+                    _stateDetector.WaitForWindowStabilization(() => restoreApplicationsOnCurrentDisplays());
+                    _logger?.LogInformation("Restore completed.");
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogError(ex.ToString());
+                    _logger?.LogError(ex, "Restore failed.");
                 }
-                _isRestoring = false;
-                _ignoreCaptureRequests = false; // Resume handling of capture requests
+                finally
+                {
+                    _isRestorePending = false;
+                    _ignoreCaptureRequests = false; // Resume handling of capture requests
+                }
             })
             {
                 Name = "PersistentWindowProcessor.RestoreApplicationsOnCurrentDisplays()"
@@ -454,7 +456,7 @@ namespace WindowMagic.Common
                             windowPlacement.NormalPosition.Width,
                             windowPlacement.NormalPosition.Height,
                             success);
-                        
+
                         // For any windows not maximized or minimized, they might be snapped. This will place them back in their current snapped positions.
                         // (Remember: NormalPosition is used when the user wants to *restore* from the snapped position when dragging)
                         if (windowPlacement.ShowCmd != ShowWindowCommands.ShowMinimized &&
