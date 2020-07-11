@@ -16,13 +16,9 @@ namespace WindowMagic.Common.Models
 
         public static string GetKey(IntPtr hWnd, string applicationName)
         {
-            // in release mode, ApplicatioName is "" to reduce runtime
-#if DEBUG
             return string.Format("{0}-{1}", hWnd.ToString("X8"), applicationName);
-#else
-            return string.Format("{0}", hWnd.ToString("X8"));
-#endif
         }
+
         public string Key
         {
             get { return GetKey(HWnd, ApplicationName); }

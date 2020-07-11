@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Runtime.InteropServices;
 using System.Threading;
 using ManagedWinapi.Windows;
@@ -14,12 +15,12 @@ namespace WindowMagic.Common
 {
     public class PersistentWindowProcessor : IDisposable
     {
-        private const int DELAYED_CAPTURE_TIME = 3500;
+        private const int DELAYED_CAPTURE_TIME = 1500;
 
         /// <summary>
         /// Read and update this from a config file eventually
         /// </summary>
-        private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> _monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
+        private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> _desktopApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
 
         private readonly object _displayChangeLock = new object();
         private readonly IDesktopService _desktopService;
@@ -103,7 +104,7 @@ namespace WindowMagic.Common
         {
             lock (_displayChangeLock)
             {
-                _monitorApplications.Clear();
+                _desktopApplications.Clear();
             }
 
             beginCaptureApplicationsOnCurrentDisplays();
@@ -226,79 +227,92 @@ namespace WindowMagic.Common
 
         }
 
-        private void captureApplicationsOnCurrentDisplays(string desktopKey = null, bool initialCapture = false)
+        private void captureApplicationsOnCurrentDisplays(bool initialCapture = false)
         {
             lock (_displayChangeLock)
             {
-                if (desktopKey == null) desktopKey = _desktopService.GetDesktopKey();
+                var desktopKey = _desktopService.GetDesktopKey();
 
-                if (!_monitorApplications.ContainsKey(desktopKey))
+                _logger?.LogInformation($"Capture applications for desktop '{desktopKey}' started.");
+
+                try
                 {
-                    _logger.LogInformation($"New desktop with DesktopKey '{desktopKey}' has been identified.");
-                    _monitorApplications.Add(desktopKey, new SortedDictionary<string, ApplicationDisplayMetrics>());
+
+                    if (!_desktopApplications.TryGetValue(desktopKey, out var applications))
+                    {
+                        _logger.LogInformation($"New desktop with DesktopKey '{desktopKey}' has been identified.");
+                        applications = new SortedDictionary<string, ApplicationDisplayMetrics>();
+                        _desktopApplications.Add(desktopKey, applications);
+                    }
+
+                    var updateLogs = new List<string>();
+                    var updateApps = new List<ApplicationDisplayMetrics>();
+                    var appWindows = _windowService.CaptureWindowsOfInterest();
+
+                    foreach (var window in appWindows)
+                    {
+                        if (hasWindowChanged(applications, window, out ApplicationDisplayMetrics curDisplayMetrics))
+                        {
+                            updateApps.Add(curDisplayMetrics);
+                            var log = string.Format("Captured {0,-8} at ({1}, {2}) of size {3} x {4} V:{5} {6} ",
+                                curDisplayMetrics,
+                                curDisplayMetrics.ScreenPosition.Left,
+                                curDisplayMetrics.ScreenPosition.Top,
+                                curDisplayMetrics.ScreenPosition.Width,
+                                curDisplayMetrics.ScreenPosition.Height,
+                                window.Visible,
+                                window.Title
+                                );
+
+                            var log2 = string.Format("\n    WindowPlacement.NormalPosition at ({0}, {1}) of size {2} x {3}",
+                                curDisplayMetrics.WindowPlacement.NormalPosition.Left,
+                                curDisplayMetrics.WindowPlacement.NormalPosition.Top,
+                                curDisplayMetrics.WindowPlacement.NormalPosition.Width,
+                                curDisplayMetrics.WindowPlacement.NormalPosition.Height
+                                );
+
+                            updateLogs.Add(log + log2);
+                        }
+                    }
+
+                    _logger?.LogTrace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", desktopKey);
+
+                    var commitUpdateLog = new List<string>();
+
+                    for (var i = 0; i < updateApps.Count; i++)
+                    {
+                        var curDisplayMetrics = updateApps[i];
+                        commitUpdateLog.Add(updateLogs[i]);
+
+                        if (applications.TryGetValue(curDisplayMetrics.Key, out var appMetrics))
+                        {
+                            /*
+                            // partially update Normal position part of WindowPlacement
+                            WindowPlacement wp = monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement;
+                            wp.NormalPosition = curDisplayMetrics.WindowPlacement.NormalPosition;
+                            monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = wp;
+                            */
+                            appMetrics.WindowPlacement = curDisplayMetrics.WindowPlacement;
+                            appMetrics.ScreenPosition = curDisplayMetrics.ScreenPosition;
+                        }
+                        else
+                        {
+                            applications.Add(curDisplayMetrics.Key, curDisplayMetrics);
+                        }
+                    }
+
+                    _logger?.LogTrace("{0}{1}{2} windows captured", string.Join(Environment.NewLine, commitUpdateLog), Environment.NewLine, commitUpdateLog.Count);
+
+                    _logger?.LogInformation($"Capture applications for desktop '{desktopKey}' completed.");
                 }
-
-                var updateLogs = new List<string>();
-                var updateApps = new List<ApplicationDisplayMetrics>();
-                var appWindows = _windowService.CaptureWindowsOfInterest();
-
-                foreach (var window in appWindows)
+                catch (Exception ex)
                 {
-                    if (hasWindowChanged(desktopKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
-                    {
-                        updateApps.Add(curDisplayMetrics);
-                        var log = string.Format("Captured {0,-8} at ({1}, {2}) of size {3} x {4} V:{5} {6} ",
-                            curDisplayMetrics,
-                            curDisplayMetrics.ScreenPosition.Left,
-                            curDisplayMetrics.ScreenPosition.Top,
-                            curDisplayMetrics.ScreenPosition.Width,
-                            curDisplayMetrics.ScreenPosition.Height,
-                            window.Visible,
-                            window.Title
-                            );
-
-                        var log2 = string.Format("\n    WindowPlacement.NormalPosition at ({0}, {1}) of size {2} x {3}",
-                            curDisplayMetrics.WindowPlacement.NormalPosition.Left,
-                            curDisplayMetrics.WindowPlacement.NormalPosition.Top,
-                            curDisplayMetrics.WindowPlacement.NormalPosition.Width,
-                            curDisplayMetrics.WindowPlacement.NormalPosition.Height
-                            );
-
-                        updateLogs.Add(log + log2);
-                    }
+                    _logger?.LogError(ex, $"Capture applications for desktop '{desktopKey}' failed.");
                 }
-
-                _logger?.LogTrace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", desktopKey);
-
-                List<string> commitUpdateLog = new List<string>();
-
-                for (int i = 0; i < updateApps.Count; i++)
-                {
-                    ApplicationDisplayMetrics curDisplayMetrics = updateApps[i];
-                    commitUpdateLog.Add(updateLogs[i]);
-                    if (!_monitorApplications[desktopKey].ContainsKey(curDisplayMetrics.Key))
-                    {
-                        _monitorApplications[desktopKey].Add(curDisplayMetrics.Key, curDisplayMetrics);
-                    }
-                    else
-                    {
-                        /*
-                        // partially update Normal position part of WindowPlacement
-                        WindowPlacement wp = monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement;
-                        wp.NormalPosition = curDisplayMetrics.WindowPlacement.NormalPosition;
-                        monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = wp;
-                        */
-                        _monitorApplications[desktopKey][curDisplayMetrics.Key].WindowPlacement = curDisplayMetrics.WindowPlacement;
-                        _monitorApplications[desktopKey][curDisplayMetrics.Key].ScreenPosition = curDisplayMetrics.ScreenPosition;
-                    }
-                }
-
-                //commitUpdateLog.Sort();
-                _logger?.LogTrace("{0}{1}{2} windows captured", string.Join(Environment.NewLine, commitUpdateLog), Environment.NewLine, commitUpdateLog.Count);
             }
         }
 
-        private bool hasWindowChanged(string desktopKey, SystemWindow window, out ApplicationDisplayMetrics curDisplayMetrics)
+        private bool hasWindowChanged(SortedDictionary<string, ApplicationDisplayMetrics> prevDisplayMetricsCollection, SystemWindow window, out ApplicationDisplayMetrics curDisplayMetrics)
         {
             var windowPlacement = new WindowPlacement();
             User32.GetWindowPlacement(window.HWnd, ref windowPlacement);
@@ -326,20 +340,17 @@ namespace WindowMagic.Common
                 ScreenPosition = screenPosition
             };
 
-            var needUpdate = false;
+            bool needUpdate;
 
-            if (!_monitorApplications[desktopKey].ContainsKey(curDisplayMetrics.Key))
+            if (prevDisplayMetricsCollection.TryGetValue(curDisplayMetrics.Key, out var prevDisplayMetrics))
             {
-                needUpdate = true;
-            }
-            else
-            {
-                var prevDisplayMetrics = _monitorApplications[desktopKey][curDisplayMetrics.Key];
-
                 if (prevDisplayMetrics.ProcessId != curDisplayMetrics.ProcessId)
                 {
                     // key collision between dead window and new window with the same hwnd
-                    _monitorApplications[desktopKey].Remove(curDisplayMetrics.Key);
+
+                    _logger?.LogWarning($"Window ProcessId has changed from {prevDisplayMetrics.ProcessId } to {curDisplayMetrics.ProcessId}. Removing from known positions collection.");
+
+                    prevDisplayMetricsCollection.Remove(curDisplayMetrics.Key);
                     needUpdate = true;
                 }
                 else if (!prevDisplayMetrics.ScreenPosition.Equals(curDisplayMetrics.ScreenPosition))
@@ -354,6 +365,17 @@ namespace WindowMagic.Common
 
                     _logger?.LogTrace("Window placement changed for: {0} {1} {2}.", window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
                 }
+                else
+                {
+                    needUpdate = false;
+
+                    _logger?.LogTrace("Window position and placement not changed for: {0} {1} {2}.", window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
+                }
+            }
+            else
+            {
+                _logger?.LogTrace("Window is new for: {0} {1} {2}.", window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
+                needUpdate = true;
             }
 
             return needUpdate;
@@ -390,102 +412,136 @@ namespace WindowMagic.Common
             thread.Start();
         }
 
-        private void restoreApplicationsOnCurrentDisplays(string desktopKey = null)
+        private void restoreApplicationsOnCurrentDisplays()
         {
             lock (_displayChangeLock)
             {
-                if (desktopKey == null) desktopKey = _desktopService.GetDesktopKey();
+                var desktopKey = _desktopService.GetDesktopKey();
 
-                if (!_monitorApplications.ContainsKey(desktopKey) || _monitorApplications[desktopKey].Count == 0)
+                _logger?.LogInformation($"Restore applications for desktop '{desktopKey}' started.");
+
+                if (!_desktopApplications.TryGetValue(desktopKey, out var applications))
                 {
                     // the display setting has not been captured yet
-                    _logger?.LogTrace("Unknown display setting {0}", desktopKey);
+                    _logger?.LogWarning($"Restore applications for desktop '{desktopKey}' completed with warning (no capture data).");
                     return;
                 }
-
-                _logger?.LogInformation("Restoring applications for {0}", desktopKey);
-                foreach (var window in _windowService.CaptureWindowsOfInterest())
+                else
                 {
-                    var procName = window.Process.ProcessName;
-                    if (procName.Contains("CodeSetup")) // SFA: What's this about??? seems almost too specific!
+                    if (applications.Count == 0)
                     {
-                        // prevent hang in SetWindowPlacement()
-                        continue;
-                    }
-
-                    var applicationKey = ApplicationDisplayMetrics.GetKey(window.HWnd, window.Process.ProcessName);
-
-                    var prevDisplayMetrics = _monitorApplications[desktopKey][applicationKey];
-                    var windowPlacement = prevDisplayMetrics.WindowPlacement;
-
-                    if (_monitorApplications[desktopKey].ContainsKey(applicationKey))
-                    {
-                        if (!hasWindowChanged(desktopKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
-                        {
-                            continue;
-                        }
-
-                        // SetWindowPlacement will "place" the window on the correct screen based on its normal position.
-                        // If the state isn't "normal/restored" the window will appear not to actually move. To solve this
-                        // either a quick switch from 'restore' to whatever the target state is, or using another API
-                        // to position the window.
-                        bool success;
-                        if (windowPlacement.ShowCmd != ShowWindowCommands.Normal)
-                        {
-                            var prevCmd = windowPlacement.ShowCmd;
-                            windowPlacement.ShowCmd = ShowWindowCommands.Normal;
-                            success = checkWin32Error(User32.SetWindowPlacement(window.HWnd, ref windowPlacement));
-                            windowPlacement.ShowCmd = prevCmd;
-
-                            _logger?.LogTrace("Toggling to normal window state for: ({0} [{1}x{2}]-[{3}x{4}]) - {5}",
-                                window.Process.ProcessName,
-                                windowPlacement.NormalPosition.Left,
-                                windowPlacement.NormalPosition.Top,
-                                windowPlacement.NormalPosition.Width,
-                                windowPlacement.NormalPosition.Height,
-                                success);
-                        }
-
-                        // Set final window placement data - sets "normal" position for all windows (used for de-snapping and screen ID'ing)
-                        success = checkWin32Error(User32.SetWindowPlacement(window.HWnd, ref windowPlacement));
-
-                        _logger?.LogTrace("SetWindowPlacement({0} [{1}x{2}]-[{3}x{4}]) - {5}",
-                            window.Process.ProcessName,
-                            windowPlacement.NormalPosition.Left,
-                            windowPlacement.NormalPosition.Top,
-                            windowPlacement.NormalPosition.Width,
-                            windowPlacement.NormalPosition.Height,
-                            success);
-
-                        // For any windows not maximized or minimized, they might be snapped. This will place them back in their current snapped positions.
-                        // (Remember: NormalPosition is used when the user wants to *restore* from the snapped position when dragging)
-                        if (windowPlacement.ShowCmd != ShowWindowCommands.ShowMinimized &&
-                            windowPlacement.ShowCmd != ShowWindowCommands.ShowMaximized)
-                        {
-                            var rect = prevDisplayMetrics.ScreenPosition;
-                            success = User32.SetWindowPos(
-                                window.HWnd,
-                                IntPtr.Zero,
-                                rect.Left,
-                                rect.Top,
-                                rect.Width,
-                                rect.Height,
-                                (uint)(SetWindowPosFlags.IgnoreZOrder
-                                       | SetWindowPosFlags.AsynchronousWindowPosition));
-
-                            _logger?.LogTrace("Restoring position of non maximized/minimized window: SetWindowPos({0} [{1}x{2}]-[{3}x{4}]) - {5}",
-                                window.Process.ProcessName,
-                                rect.Left,
-                                rect.Top,
-                                rect.Width,
-                                rect.Height,
-                                success);
-
-                            checkWin32Error(success);
-                        }
+                        _logger?.LogWarning($"Restore applications for desktop '{desktopKey}' completed with warning (capture data empty).");
+                        return;
                     }
                 }
-                _logger?.LogTrace("Restored windows position for display setting {0}", desktopKey);
+
+                try
+                {
+                    var windowsOfInterest = _windowService.CaptureWindowsOfInterest();
+
+                    _logger?.LogInformation($"Found {windowsOfInterest.Length} windows in WindowMagic interest.");
+
+                    foreach (var window in windowsOfInterest)
+                    {
+                        var procName = window.Process.ProcessName;
+                        if (procName.Contains("CodeSetup")) continue; // prevent hang in SetWindowPlacement() (SFA: What's this about??? seems almost too specific!)
+
+                        var applicationKey = ApplicationDisplayMetrics.GetKey(window.HWnd, window.Process.ProcessName);
+
+                        if (applications.TryGetValue(applicationKey, out var prevDisplayMetrics))
+                        {
+                            try
+                            {
+                                _logger?.LogInformation($"Restore position for '{applicationKey}' started.");
+
+                                if (hasWindowChanged(applications, window, out ApplicationDisplayMetrics curDisplayMetrics))
+                                {
+                                    var windowPlacement = prevDisplayMetrics.WindowPlacement;
+
+                                    // SetWindowPlacement will "place" the window on the correct screen based on its normal position.
+                                    // If the state isn't "normal/restored" the window will appear not to actually move. To solve this
+                                    // either a quick switch from 'restore' to whatever the target state is, or using another API
+                                    // to position the window.
+                                    bool success;
+                                    if (windowPlacement.ShowCmd != ShowWindowCommands.Normal)
+                                    {
+                                        var prevCmd = windowPlacement.ShowCmd;
+                                        windowPlacement.ShowCmd = ShowWindowCommands.Normal;
+                                        success = checkWin32Error(User32.SetWindowPlacement(window.HWnd, ref windowPlacement));
+                                        windowPlacement.ShowCmd = prevCmd;
+
+                                        _logger?.LogTrace("Toggling to normal window state for: ({0} [{1}x{2}]-[{3}x{4}]) - {5}",
+                                            window.Process.ProcessName,
+                                            windowPlacement.NormalPosition.Left,
+                                            windowPlacement.NormalPosition.Top,
+                                            windowPlacement.NormalPosition.Width,
+                                            windowPlacement.NormalPosition.Height,
+                                            success);
+                                    }
+
+                                    // Set final window placement data - sets "normal" position for all windows (used for de-snapping and screen ID'ing)
+                                    success = checkWin32Error(User32.SetWindowPlacement(window.HWnd, ref windowPlacement));
+
+                                    _logger?.LogTrace("SetWindowPlacement({0} [{1}x{2}]-[{3}x{4}]) - {5}",
+                                        window.Process.ProcessName,
+                                        windowPlacement.NormalPosition.Left,
+                                        windowPlacement.NormalPosition.Top,
+                                        windowPlacement.NormalPosition.Width,
+                                        windowPlacement.NormalPosition.Height,
+                                        success);
+
+                                    // For any windows not maximized or minimized, they might be snapped. This will place them back in their current snapped positions.
+                                    // (Remember: NormalPosition is used when the user wants to *restore* from the snapped position when dragging)
+                                    if (windowPlacement.ShowCmd != ShowWindowCommands.ShowMinimized &&
+                                        windowPlacement.ShowCmd != ShowWindowCommands.ShowMaximized)
+                                    {
+                                        var rect = prevDisplayMetrics.ScreenPosition;
+                                        success = User32.SetWindowPos(
+                                            window.HWnd,
+                                            IntPtr.Zero,
+                                            rect.Left,
+                                            rect.Top,
+                                            rect.Width,
+                                            rect.Height,
+                                            (uint)(SetWindowPosFlags.IgnoreZOrder
+                                                   | SetWindowPosFlags.AsynchronousWindowPosition));
+
+                                        _logger?.LogTrace("Restoring position of non maximized/minimized window: SetWindowPos({0} [{1}x{2}]-[{3}x{4}]) - {5}",
+                                            window.Process.ProcessName,
+                                            rect.Left,
+                                            rect.Top,
+                                            rect.Width,
+                                            rect.Height,
+                                            success);
+
+                                        checkWin32Error(success);
+                                    }
+
+                                    _logger?.LogInformation($"Restore position for '{applicationKey}' completed (position changed).");
+                                }
+                                else
+                                {
+                                    _logger?.LogInformation($"Restore position for '{applicationKey}' completed (position change not needed).");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.LogWarning(ex, $"Restore position for '{applicationKey}' failed.");
+                            }
+                        }
+                        else
+                        {
+                            _logger?.LogInformation($"Restore position for '{applicationKey}' ignored, previous location found.");
+                        }
+                    }
+
+                    _logger?.LogInformation($"Restore applications for desktop '{desktopKey}' completed.");
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, $"Restore applications for desktop '{desktopKey}' failed.");
+                    throw;
+                }
             }
         }
 

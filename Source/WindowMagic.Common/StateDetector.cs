@@ -13,7 +13,7 @@ namespace WindowMagic.Common
 
     public class StateDetector : IStateDetector
     {
-        private const int STABILIZATION_WAIT_INTERVAL = 2500; // with value of 500 restoration started to early on some setups
+        private const int STABILIZATION_WAIT_INTERVAL = 1000; 
         
         private readonly IWindowService _windowService;
         private readonly ILogger<StateDetector> _logger;

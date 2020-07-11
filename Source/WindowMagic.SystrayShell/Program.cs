@@ -28,6 +28,11 @@ namespace WindowMagic.SystrayShell
 #if DEBUG
                     options.AddDebug(); 
                     options.SetMinimumLevel(LogLevel.Trace);
+
+                    if ((from a in args where a == "--debug" select a).Count() > 0)
+                    {
+                        options.AddFile();
+                    }
 #else
                     if ((from a in args where a == "--debug" select a).Count()>0)
                     {

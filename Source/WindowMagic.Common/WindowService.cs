@@ -17,7 +17,7 @@ namespace WindowMagic.Common
     {
         event EventHandler WindowPositionsChanged;
 
-        IEnumerable<SystemWindow> CaptureWindowsOfInterest();
+        SystemWindow[] CaptureWindowsOfInterest();
     }
 
     public class WindowService : IWindowService, IDisposable
@@ -73,7 +73,7 @@ namespace WindowMagic.Common
             }
         }
 
-        public IEnumerable<SystemWindow> CaptureWindowsOfInterest()
+        public SystemWindow[] CaptureWindowsOfInterest()
         {
             return SystemWindow.AllToplevelWindows
                 .Where(row =>
@@ -92,7 +92,7 @@ namespace WindowMagic.Common
                            // && !row.Title.Equals("Program Manager")
                            //&& !row.Title.Contains("Task Manager")
                            && row.Visible;
-                });
+                }).ToArray();
         }
 
         private readonly List<IntPtr> _monitoredWinEventsHookHandles = new List<IntPtr>();
