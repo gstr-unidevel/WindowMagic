@@ -15,7 +15,7 @@ namespace WindowMagic.Common
 {
     public class PersistentWindowProcessor : IDisposable
     {
-        private const int DELAYED_CAPTURE_TIME = 1500;
+        private const int DELAYED_CAPTURE_TIME = 4500;
 
         /// <summary>
         /// Read and update this from a config file eventually
