@@ -101,7 +101,7 @@ namespace WindowMagic.Common
         /// </summary>
         public void ForceCaptureLayout()
         {
-            lock (this._displayChangeLock)
+            lock (_displayChangeLock)
             {
                 _monitorApplications.Clear();
             }
@@ -112,13 +112,15 @@ namespace WindowMagic.Common
         private void displaySettingsChangingHandler(object sender, EventArgs args)
         {
                 _logger?.LogTrace("Display settings changing handler invoked");
-                this._ignoreCaptureRequests = true;
+                _ignoreCaptureRequests = true;
+
                 cancelDelayedCapture(); // Throw away any pending captures
         }
 
         private void displaySettingsChangedHandler(object sender, EventArgs args)
         {
             _logger?.LogTrace("Display settings changed");
+
             _stateDetector.WaitForWindowStabilization(() =>
             {
                 // CancelDelayedCapture(); // Throw away any pending captures
@@ -128,7 +130,7 @@ namespace WindowMagic.Common
 
         private bool isCaptureAllowed()
         {
-            return !(this._isSessionLocked || this._ignoreCaptureRequests || this._isRestoring);
+            return !(_isSessionLocked || _ignoreCaptureRequests || _isRestoring);
         }
 
         private void powerModeChangedHandler(object sender, PowerModeChangedEventArgs e)
@@ -178,7 +180,7 @@ namespace WindowMagic.Common
         /// </summary>
         private void restartDelayedCapture()
         {
-            if (this._ignoreCaptureRequests)
+            if (_ignoreCaptureRequests)
             {
                 _logger?.LogTrace("Can't restart delayed capture. Currently ignoring capture requests.");
                 return;
@@ -196,7 +198,7 @@ namespace WindowMagic.Common
         private void cancelDelayedCapture()
         {
             _logger?.LogTrace("Cancelling delayed capture if pending");
-            this._delayedCaptureTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            _delayedCaptureTimer.Change(Timeout.Infinite, Timeout.Infinite);
         }
 
         private void beginCaptureApplicationsOnCurrentDisplays()
@@ -245,7 +247,7 @@ namespace WindowMagic.Common
                     if (hasWindowChanged(desktopKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
                     {
                         updateApps.Add(curDisplayMetrics);
-                        string log = string.Format("Captured {0,-8} at ({1}, {2}) of size {3} x {4} V:{5} {6} ",
+                        var log = string.Format("Captured {0,-8} at ({1}, {2}) of size {3} x {4} V:{5} {6} ",
                             curDisplayMetrics,
                             curDisplayMetrics.ScreenPosition.Left,
                             curDisplayMetrics.ScreenPosition.Top,
@@ -254,12 +256,14 @@ namespace WindowMagic.Common
                             window.Visible,
                             window.Title
                             );
-                        string log2 = string.Format("\n    WindowPlacement.NormalPosition at ({0}, {1}) of size {2} x {3}",
+
+                        var log2 = string.Format("\n    WindowPlacement.NormalPosition at ({0}, {1}) of size {2} x {3}",
                             curDisplayMetrics.WindowPlacement.NormalPosition.Left,
                             curDisplayMetrics.WindowPlacement.NormalPosition.Top,
                             curDisplayMetrics.WindowPlacement.NormalPosition.Width,
                             curDisplayMetrics.WindowPlacement.NormalPosition.Height
                             );
+
                         updateLogs.Add(log + log2);
                     }
                 }
@@ -304,7 +308,7 @@ namespace WindowMagic.Common
             var screenPosition = new RECT();
             User32.GetWindowRect(window.HWnd, ref screenPosition);
 
-            uint threadId = User32.GetWindowThreadProcessId(window.HWnd, out uint processId);
+            var threadId = User32.GetWindowThreadProcessId(window.HWnd, out uint processId);
 
             curDisplayMetrics = new ApplicationDisplayMetrics
             {
@@ -313,7 +317,7 @@ namespace WindowMagic.Common
                 // these function calls are very cpu-intensive
                 ApplicationName = window.Process.ProcessName,
 #else
-                ApplicationName = "",
+                ApplicationName = String.Empty,
 #endif
                 ProcessId = processId,
 
@@ -322,14 +326,16 @@ namespace WindowMagic.Common
                 ScreenPosition = screenPosition
             };
 
-            bool needUpdate = false;
+            var needUpdate = false;
+
             if (!_monitorApplications[desktopKey].ContainsKey(curDisplayMetrics.Key))
             {
                 needUpdate = true;
             }
             else
             {
-                ApplicationDisplayMetrics prevDisplayMetrics = _monitorApplications[desktopKey][curDisplayMetrics.Key];
+                var prevDisplayMetrics = _monitorApplications[desktopKey][curDisplayMetrics.Key];
+
                 if (prevDisplayMetrics.ProcessId != curDisplayMetrics.ProcessId)
                 {
                     // key collision between dead window and new window with the same hwnd
@@ -340,30 +346,13 @@ namespace WindowMagic.Common
                 {
                     needUpdate = true;
 
-                    _logger?.LogTrace("Window position changed for: {0} {1} {2}.",
-                        window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
+                    _logger?.LogTrace("Window position changed for: {0} {1} {2}.", window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
                 }
                 else if (!prevDisplayMetrics.EqualPlacement(curDisplayMetrics))
                 {
                     needUpdate = true;
 
-                    _logger?.LogTrace("Window placement changed for: {0} {1} {2}.",
-                        window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
-
-                    //string log = string.Format("prev WindowPlacement ({0}, {1}) of size {2} x {3}",
-                    //    prevDisplayMetrics.WindowPlacement.NormalPosition.Left,
-                    //    prevDisplayMetrics.WindowPlacement.NormalPosition.Top,
-                    //    prevDisplayMetrics.WindowPlacement.NormalPosition.Width,
-                    //    prevDisplayMetrics.WindowPlacement.NormalPosition.Height
-                    //    );
-
-                    //string log2 = string.Format("\ncur  WindowPlacement ({0}, {1}) of size {2} x {3}",
-                    //    curDisplayMetrics.WindowPlacement.NormalPosition.Left,
-                    //    curDisplayMetrics.WindowPlacement.NormalPosition.Top,
-                    //    curDisplayMetrics.WindowPlacement.NormalPosition.Width,
-                    //    curDisplayMetrics.WindowPlacement.NormalPosition.Height
-                    //    );
-                    //_logger?.LogTrace("{0}", log + log2);
+                    _logger?.LogTrace("Window placement changed for: {0} {1} {2}.", window.Process.ProcessName, processId, window.HWnd.ToString("X8"));
                 }
             }
 
@@ -389,16 +378,13 @@ namespace WindowMagic.Common
                 {
                     _logger?.LogError(ex.ToString());
                 }
-                this._isRestoring = false;
-                this._ignoreCaptureRequests = false; // Resume handling of capture requests
-
-                //this.BeginCaptureApplicationsOnCurrentDisplays();
-
+                _isRestoring = false;
+                _ignoreCaptureRequests = false; // Resume handling of capture requests
             })
             {
-                //thread.IsBackground = true;
                 Name = "PersistentWindowProcessor.RestoreApplicationsOnCurrentDisplays()"
             };
+
             thread.Start();
         }
 
