@@ -17,23 +17,16 @@ namespace WindowMagic.Common
         private const int delayedCaptureTime = 3500;
 
         // read and update this from a config file eventually
-        private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = null;
+        private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
 
         private readonly object displayChangeLock = new object();
 
-        private EventHandler displaySettingsChangingHandler;
-        private EventHandler displaySettingsChangedHandler;
-        private PowerModeChangedEventHandler powerModeChangedHandler;
-        private SessionSwitchEventHandler sessionSwitchEventHandler;
-
-        private readonly List<IntPtr> winEventHookHandles = new List<IntPtr>();
-        private readonly User32.WinEventDelegate winEventsCaptureDelegate;
         private readonly IStateDetector _stateDetector;
+        private readonly IWindowPositionService _windowPositionService;
         private readonly ILogger<PersistentWindowProcessor> _logger;
         
         private bool isSessionLocked = false;
         private bool isRestoring = false;
-
         private bool isCapturing = false;
 
         /// <summary>
@@ -46,22 +39,18 @@ namespace WindowMagic.Common
         /// </summary>
         private bool pendingCaptureRequest = false;
 
-        private Timer ignoreCaptureTimer;
         private Timer delayedCaptureTimer;
 
-        public PersistentWindowProcessor(IStateDetector stateDetector, ILogger<PersistentWindowProcessor> logger)
+        public PersistentWindowProcessor(IStateDetector stateDetector, IWindowPositionService windowPositionService, ILogger<PersistentWindowProcessor> logger)
         {
             _stateDetector = stateDetector ?? throw new ArgumentNullException(nameof(stateDetector));
+            _windowPositionService = windowPositionService ?? throw new ArgumentNullException(nameof(windowPositionService));
             _logger = logger;
 
-            monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
-            this.createEventHandlers();
-            this.winEventsCaptureDelegate = winEventProc;
-
-            this.delayedCaptureTimer = new Timer(state =>
+            delayedCaptureTimer = new Timer(state =>
             {
                 _logger?.LogTrace("Delayed capture timer triggered");
-                this.beginCaptureApplicationsOnCurrentDisplays();
+                beginCaptureApplicationsOnCurrentDisplays();
             });
         }
 
@@ -69,41 +58,33 @@ namespace WindowMagic.Common
         {
             captureApplicationsOnCurrentDisplays(initialCapture: true);
 
-            _logger?.LogInformation("Attaching event handlers");
-            SystemEvents.DisplaySettingsChanging += this.displaySettingsChangingHandler;
-            SystemEvents.DisplaySettingsChanged += this.displaySettingsChangedHandler;
-            SystemEvents.PowerModeChanged += this.powerModeChangedHandler;
-            SystemEvents.SessionSwitch += this.sessionSwitchEventHandler;
+            attachEventHandlers();
+        }
 
-            // Movement or resizing of a window has finished
-            winEventHookHandles.Add(User32.SetWinEventHook(
-                (uint)User32Events.EVENT_SYSTEM_MOVESIZEEND,
-                (uint)User32Events.EVENT_SYSTEM_MOVESIZEEND,
-                IntPtr.Zero,
-                this.winEventsCaptureDelegate,
-                0,
-                0,
-                (uint)User32Events.WINEVENT_OUTOFCONTEXT));
+        private void attachEventHandlers()
+        {
+            _logger?.LogInformation("Event handlers attach started.");
 
-            // This seems to cover most moves involving snaps and minimize / restore
-            winEventHookHandles.Add(User32.SetWinEventHook(
-                (uint)User32Events.EVENT_SYSTEM_FOREGROUND,
-                (uint)User32Events.EVENT_SYSTEM_FOREGROUND,
-                IntPtr.Zero,
-                this.winEventsCaptureDelegate,
-                0,
-                0,
-                (uint)User32Events.WINEVENT_OUTOFCONTEXT));
+            SystemEvents.DisplaySettingsChanging += displaySettingsChangingHandler;
+            SystemEvents.DisplaySettingsChanged += displaySettingsChangedHandler;
+            SystemEvents.PowerModeChanged += powerModeChangedHandler;
+            SystemEvents.SessionSwitch += sessionSwitchEventHandler;
+            _windowPositionService.WindowPositionsChanged += windowPositionChangedHandler;
 
-            // Any movements around clicking / dragging (in case it's missed by the other events)
-            winEventHookHandles.Add(User32.SetWinEventHook(
-                (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
-                (uint)User32Events.EVENT_SYSTEM_CAPTUREEND,
-                IntPtr.Zero,
-                this.winEventsCaptureDelegate,
-                0,
-                0,
-                (uint)User32Events.WINEVENT_OUTOFCONTEXT));
+            _logger?.LogInformation("Event handlers attach completed.");
+        }
+
+        private void detachEventHandlers()
+        {
+            _logger?.LogInformation("Event handlers detach started.");
+
+            SystemEvents.DisplaySettingsChanging -= displaySettingsChangingHandler;
+            SystemEvents.DisplaySettingsChanged -= displaySettingsChangedHandler;
+            SystemEvents.PowerModeChanged -= powerModeChangedHandler;
+            SystemEvents.SessionSwitch -= sessionSwitchEventHandler;
+            _windowPositionService.WindowPositionsChanged -= windowPositionChangedHandler;
+
+            _logger?.LogInformation("Event handlers detach completed.");
         }
 
         /// <summary>
@@ -119,65 +100,21 @@ namespace WindowMagic.Common
             beginCaptureApplicationsOnCurrentDisplays();
         }
 
-        /// <summary>
-        /// Create event handlers needed to detect various state changes that affect window capture.
-        /// This is done explicitly with assigned fields to allow proper disposal.According to the
-        /// documentation, if not properly disposed, there will be leaks(although I'm skeptical for
-        /// this use case, since they live the lifetime of the process).       
-        /// </summary>
-        private void createEventHandlers()
+        private void displaySettingsChangingHandler(object sender, EventArgs args)
         {
-            displaySettingsChangingHandler = (s, e) =>
-            {
                 _logger?.LogTrace("Display settings changing handler invoked");
                 this.ignoreCaptureRequests = true;
                 cancelDelayedCapture(); // Throw away any pending captures
-            };
+        }
 
-            displaySettingsChangedHandler = (s, e) =>
+        private void displaySettingsChangedHandler(object sender, EventArgs args)
+        {
+            _logger?.LogTrace("Display settings changed");
+            _stateDetector.WaitForWindowStabilization(() =>
             {
-                _logger?.LogTrace("Display settings changed");
-                _stateDetector.WaitForWindowStabilization(() =>
-                {
-                    // CancelDelayedCapture(); // Throw away any pending captures
-                    beginRestoreApplicationsOnCurrentDisplays();
-                });
-            };
-
-            powerModeChangedHandler = (s, e) =>
-            {
-                switch (e.Mode)
-                {
-                    case PowerModes.Suspend:
-                        _logger?.LogInformation("System Suspending");
-                        break;
-
-                    case PowerModes.Resume:
-                        _logger?.LogInformation("System Resuming");
-                        ignoreCaptureRequests = true;
-                        cancelDelayedCapture(); // Throw away any pending captures
-                        beginRestoreApplicationsOnCurrentDisplays();
-                        break;
-
-                    default:
-                        _logger?.LogTrace("Unhandled power mode change: {0}", nameof(e.Mode));
-                        break;
-                }
-            };
-
-            sessionSwitchEventHandler = (sender, args) =>
-            {
-                if (args.Reason == SessionSwitchReason.SessionLock)
-                {
-                    _logger?.LogTrace("Session locked");
-                    this.isSessionLocked = true;
-                } 
-                else if (args.Reason == SessionSwitchReason.SessionUnlock)
-                {
-                    _logger?.LogTrace("Session unlocked");
-                    this.isSessionLocked = false;
-                }
-            };
+                // CancelDelayedCapture(); // Throw away any pending captures
+                beginRestoreApplicationsOnCurrentDisplays();
+            });
         }
 
         private bool isCaptureAllowed()
@@ -185,9 +122,43 @@ namespace WindowMagic.Common
             return !(this.isSessionLocked || this.ignoreCaptureRequests || this.isRestoring);
         }
 
-        private void winEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        private void powerModeChangedHandler(object sender, PowerModeChangedEventArgs e)
         {
-            _logger?.LogTrace($"Capture triggered from WinEvent with eventType {eventType:x8}");
+            switch (e.Mode)
+            {
+                case PowerModes.Suspend:
+                    _logger?.LogInformation("System Suspending");
+                    break;
+
+                case PowerModes.Resume:
+                    _logger?.LogInformation("System Resuming");
+                    ignoreCaptureRequests = true;
+                    cancelDelayedCapture(); // Throw away any pending captures
+                    beginRestoreApplicationsOnCurrentDisplays();
+                    break;
+
+                default:
+                    _logger?.LogTrace("Unhandled power mode change: {0}", nameof(e.Mode));
+                    break;
+            }
+        }
+
+        private void sessionSwitchEventHandler(object sender, SessionSwitchEventArgs args)
+        {
+            if (args.Reason == SessionSwitchReason.SessionLock)
+            {
+                _logger?.LogTrace("Session locked");
+                this.isSessionLocked = true;
+            }
+            else if (args.Reason == SessionSwitchReason.SessionUnlock)
+            {
+                _logger?.LogTrace("Session unlocked");
+                this.isSessionLocked = false;
+            }
+        }
+
+        private void windowPositionChangedHandler(object sender, EventArgs args)
+        {
             restartDelayedCapture();
         }
 
@@ -546,22 +517,7 @@ namespace WindowMagic.Common
         {
             if (!isDisposed)
             {
-                if (disposing)
-                {
-                    if (this.displaySettingsChangedHandler != null)
-                    {
-                        SystemEvents.DisplaySettingsChanged -= this.displaySettingsChangedHandler;
-                    }
-                    if (this.powerModeChangedHandler != null)
-                    {
-                        SystemEvents.PowerModeChanged -= this.powerModeChangedHandler;
-                    }
-                }
-
-                foreach (var handle in this.winEventHookHandles)
-                {
-                    User32.UnhookWinEvent(handle);
-                }
+                detachEventHandlers();
 
                 isDisposed = true;
             }

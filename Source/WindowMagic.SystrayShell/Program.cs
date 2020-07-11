@@ -22,8 +22,15 @@ namespace WindowMagic.SystrayShell
             IServiceCollection services = new ServiceCollection();
             services
                 .AddSingleton<IConfiguration>(configuration)
-                .AddLogging(options => options.AddDebug())
+                .AddLogging(options => 
+                {
+#if DEBUG
+                    options.AddDebug(); 
+                    options.SetMinimumLevel(LogLevel.Trace);
+#endif
+                })
                 .AddSingleton<IStateDetector, StateDetector>()
+                .AddSingleton<IWindowPositionService, WindowPositionService>()
                 .AddSingleton<PersistentWindowProcessor>()
                 ;
 
