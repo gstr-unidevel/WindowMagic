@@ -74,11 +74,15 @@ namespace WindowMagic.Common
         private readonly ILogger<WindowPositionService> _logger;
         private bool _disposedValue;
 
+        private User32.WinEventDelegate _handleWindowPositionChangedDelegate;
+
         private void attachToSystemEvents()
         {
+            _handleWindowPositionChangedDelegate = handleWindowPositionChanged;
+
             foreach (var user32Event in _windowPositionChangedUser32Events)
             {
-                var winEventsHookHandle = User32.SetWinEventHook((uint)user32Event, (uint)user32Event, IntPtr.Zero, handleWindowPositionChanged, 0, 0, (uint)User32Events.WINEVENT_OUTOFCONTEXT);
+                var winEventsHookHandle = User32.SetWinEventHook((uint)user32Event, (uint)user32Event, IntPtr.Zero, _handleWindowPositionChangedDelegate, 0, 0, (uint)User32Events.WINEVENT_OUTOFCONTEXT);
                 _monitoredWinEventsHookHandles.Add(winEventsHookHandle);
             }
 
@@ -94,6 +98,7 @@ namespace WindowMagic.Common
             }
 
             _monitoredWinEventsHookHandles.Clear();
+            _handleWindowPositionChangedDelegate = null;
         }
 
         private void handleWindowPositionChanged(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
