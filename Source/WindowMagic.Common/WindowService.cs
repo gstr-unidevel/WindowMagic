@@ -12,12 +12,12 @@ namespace WindowMagic.Common
     /// <summary>
     /// Handles interaction with Windows Api's responsible for changing system state.
     /// </summary>
-    public interface IWindowPositionService
+    public interface IWindowService
     {
         event EventHandler WindowPositionsChanged;
     }
 
-    public class WindowPositionService : IWindowPositionService, IDisposable
+    public class WindowService : IWindowService, IDisposable
     {
         /// <summary>
         /// Stores list of events which will 
@@ -31,14 +31,14 @@ namespace WindowMagic.Common
 
         public event EventHandler WindowPositionsChanged;
 
-        public WindowPositionService(ILogger<WindowPositionService> logger)
+        public WindowService(ILogger<WindowService> logger)
         {
             _logger = logger;
 
             attachToSystemEvents();
         }
 
-        ~WindowPositionService()
+        ~WindowService()
         {
             // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
             Dispose(disposing: false);
@@ -71,7 +71,7 @@ namespace WindowMagic.Common
         }
 
         private readonly List<IntPtr> _monitoredWinEventsHookHandles = new List<IntPtr>();
-        private readonly ILogger<WindowPositionService> _logger;
+        private readonly ILogger<WindowService> _logger;
         private bool _disposedValue;
 
         private User32.WinEventDelegate _handleWindowPositionChangedDelegate;

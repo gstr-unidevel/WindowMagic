@@ -22,9 +22,9 @@ namespace WindowMagic.Common
         private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> _monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
 
         private readonly object _displayChangeLock = new object();
-        private readonly IDesktopDisplayMetricsService _desktopDisplayMetricsService;
+        private readonly IDesktopService _desktopService;
         private readonly IStateDetector _stateDetector;
-        private readonly IWindowPositionService _windowPositionService;
+        private readonly IWindowService _windowPositionService;
         private readonly ILogger<PersistentWindowProcessor> _logger;
 
         private readonly Timer _delayedCaptureTimer;
@@ -37,9 +37,9 @@ namespace WindowMagic.Common
         /// </summary>
         private bool _ignoreCaptureRequests = false;
 
-        public PersistentWindowProcessor(IDesktopDisplayMetricsService desktopDisplayMetricsService, IStateDetector stateDetector, IWindowPositionService windowPositionService, ILogger<PersistentWindowProcessor> logger)
+        public PersistentWindowProcessor(IDesktopService desktopService, IStateDetector stateDetector, IWindowService windowPositionService, ILogger<PersistentWindowProcessor> logger)
         {
-            _desktopDisplayMetricsService = desktopDisplayMetricsService ?? throw new ArgumentNullException(nameof(desktopDisplayMetricsService));
+            _desktopService = desktopService ?? throw new ArgumentNullException(nameof(desktopService));
             _stateDetector = stateDetector ?? throw new ArgumentNullException(nameof(stateDetector));
             _windowPositionService = windowPositionService ?? throw new ArgumentNullException(nameof(windowPositionService));
             _logger = logger;
@@ -216,19 +216,15 @@ namespace WindowMagic.Common
 
         }
 
-        private void captureApplicationsOnCurrentDisplays(string displayKey = null, bool initialCapture = false)
+        private void captureApplicationsOnCurrentDisplays(string desktopKey = null, bool initialCapture = false)
         {            
             lock(_displayChangeLock)
             {
-                if (displayKey == null)
-                {
-                    var metrics = _desktopDisplayMetricsService.AcquireMetrics();
-                    displayKey = metrics.Key;
-                }
+                if (desktopKey == null) desktopKey = _desktopService.GetDesktopKey();
 
-                if (!_monitorApplications.ContainsKey(displayKey))
+                if (!_monitorApplications.ContainsKey(desktopKey))
                 {
-                    _monitorApplications.Add(displayKey, new SortedDictionary<string, ApplicationDisplayMetrics>());
+                    _monitorApplications.Add(desktopKey, new SortedDictionary<string, ApplicationDisplayMetrics>());
                 }
 
                 List<string> updateLogs = new List<string>();
@@ -237,7 +233,7 @@ namespace WindowMagic.Common
                 
                 foreach (var window in appWindows)
                 {
-                    if (hasWindowChanged(displayKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
+                    if (hasWindowChanged(desktopKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
                     {
                         updateApps.Add(curDisplayMetrics);
                         string log = string.Format("Captured {0,-8} at ({1}, {2}) of size {3} x {4} V:{5} {6} ",
@@ -259,7 +255,7 @@ namespace WindowMagic.Common
                     }
                 }
 
-                _logger?.LogTrace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", displayKey);
+                _logger?.LogTrace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", desktopKey);
 
                 List<string> commitUpdateLog = new List<string>();
                 
@@ -267,9 +263,9 @@ namespace WindowMagic.Common
                 {
                     ApplicationDisplayMetrics curDisplayMetrics = updateApps[i];
                     commitUpdateLog.Add(updateLogs[i]);
-                    if (!_monitorApplications[displayKey].ContainsKey(curDisplayMetrics.Key))
+                    if (!_monitorApplications[desktopKey].ContainsKey(curDisplayMetrics.Key))
                     {
-                        _monitorApplications[displayKey].Add(curDisplayMetrics.Key, curDisplayMetrics);
+                        _monitorApplications[desktopKey].Add(curDisplayMetrics.Key, curDisplayMetrics);
                     }
                     else
                     {
@@ -279,8 +275,8 @@ namespace WindowMagic.Common
                         wp.NormalPosition = curDisplayMetrics.WindowPlacement.NormalPosition;
                         monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = wp;
                         */
-                        _monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = curDisplayMetrics.WindowPlacement;
-                        _monitorApplications[displayKey][curDisplayMetrics.Key].ScreenPosition = curDisplayMetrics.ScreenPosition;
+                        _monitorApplications[desktopKey][curDisplayMetrics.Key].WindowPlacement = curDisplayMetrics.WindowPlacement;
+                        _monitorApplications[desktopKey][curDisplayMetrics.Key].ScreenPosition = curDisplayMetrics.ScreenPosition;
                     }
                 }
 
@@ -289,7 +285,7 @@ namespace WindowMagic.Common
             }
         }
 
-        private bool hasWindowChanged(string displayKey, SystemWindow window, out ApplicationDisplayMetrics curDisplayMetrics)
+        private bool hasWindowChanged(string desktopKey, SystemWindow window, out ApplicationDisplayMetrics curDisplayMetrics)
         {
             var windowPlacement = new WindowPlacement();
             User32.GetWindowPlacement(window.HWnd, ref windowPlacement);
@@ -318,17 +314,17 @@ namespace WindowMagic.Common
             };
 
             bool needUpdate = false;
-            if (!_monitorApplications[displayKey].ContainsKey(curDisplayMetrics.Key))
+            if (!_monitorApplications[desktopKey].ContainsKey(curDisplayMetrics.Key))
             {
                 needUpdate = true;
             }
             else
             {
-                ApplicationDisplayMetrics prevDisplayMetrics = _monitorApplications[displayKey][curDisplayMetrics.Key];
+                ApplicationDisplayMetrics prevDisplayMetrics = _monitorApplications[desktopKey][curDisplayMetrics.Key];
                 if (prevDisplayMetrics.ProcessId != curDisplayMetrics.ProcessId)
                 {
                     // key collision between dead window and new window with the same hwnd
-                    _monitorApplications[displayKey].Remove(curDisplayMetrics.Key);
+                    _monitorApplications[desktopKey].Remove(curDisplayMetrics.Key);
                     needUpdate = true;
                 }
                 else if (!prevDisplayMetrics.ScreenPosition.Equals(curDisplayMetrics.ScreenPosition))
@@ -397,25 +393,20 @@ namespace WindowMagic.Common
             thread.Start();
         }
 
-        private void restoreApplicationsOnCurrentDisplays(string displayKey = null)
+        private void restoreApplicationsOnCurrentDisplays(string desktopKey = null)
         {
             lock (_displayChangeLock)
             {
-                if (displayKey == null)
-                {
-                    var metrics = _desktopDisplayMetricsService.AcquireMetrics();
-                    displayKey = metrics.Key;
-                }
+                if (desktopKey == null) desktopKey = _desktopService.GetDesktopKey();
 
-                if (!_monitorApplications.ContainsKey(displayKey)
-                    || _monitorApplications[displayKey].Count == 0)
+                if (!_monitorApplications.ContainsKey(desktopKey) || _monitorApplications[desktopKey].Count == 0)
                 {
                     // the display setting has not been captured yet
-                    _logger?.LogTrace("Unknown display setting {0}", displayKey);
+                    _logger?.LogTrace("Unknown display setting {0}", desktopKey);
                     return;
                 }
 
-                _logger?.LogInformation("Restoring applications for {0}", displayKey);
+                _logger?.LogInformation("Restoring applications for {0}", desktopKey);
                 foreach (var window in WindowHelper.CaptureWindowsOfInterest())
                 {
                     var procName = window.Process.ProcessName;
@@ -427,12 +418,12 @@ namespace WindowMagic.Common
 
                     var applicationKey = ApplicationDisplayMetrics.GetKey(window.HWnd, window.Process.ProcessName);
 
-                    var prevDisplayMetrics = _monitorApplications[displayKey][applicationKey];
+                    var prevDisplayMetrics = _monitorApplications[desktopKey][applicationKey];
                     var windowPlacement = prevDisplayMetrics.WindowPlacement;
 
-                    if (_monitorApplications[displayKey].ContainsKey(applicationKey))
+                    if (_monitorApplications[desktopKey].ContainsKey(applicationKey))
                     {
-                        if (!hasWindowChanged(displayKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
+                        if (!hasWindowChanged(desktopKey, window, out ApplicationDisplayMetrics curDisplayMetrics))
                         {
                             continue;
                         }
@@ -496,7 +487,7 @@ namespace WindowMagic.Common
                         }
                     }
                 }
-                _logger?.LogTrace("Restored windows position for display setting {0}", displayKey);
+                _logger?.LogTrace("Restored windows position for display setting {0}", desktopKey);
             }
         }
 
