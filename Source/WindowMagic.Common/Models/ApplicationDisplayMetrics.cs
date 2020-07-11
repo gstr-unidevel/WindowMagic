@@ -28,7 +28,11 @@ namespace WindowMagic.Common.Models
 
         public override string ToString()
         {
-            return string.Format("{0}.{1} {2}", ProcessId, HWnd.ToString("X8"), ProcessName);
+            return $"{processToString()} {windowPlacementToString()} {screenPositionToString()}";
         }
+
+        private string processToString() => $"{ProcessId}:{ProcessName}:{HWnd.ToString("X8")}";
+        private string windowPlacementToString() => $"Window Placement showcmd [{WindowPlacement.ShowCmd.ToString()}] normal [{WindowPlacement.NormalPosition.Left}x{WindowPlacement.NormalPosition.Top} size {WindowPlacement.NormalPosition.Width}x{WindowPlacement.NormalPosition.Height}] minpos [{WindowPlacement.MinPosition.X}x{WindowPlacement.MinPosition.Y}] maxpos [{WindowPlacement.MaxPosition.X}x{WindowPlacement.MaxPosition.Y}] flags [{WindowPlacement.Flags.ToString()}]";
+        private string screenPositionToString() => $"Screen Position [{ScreenPosition.Left}x{ScreenPosition.Top} size {ScreenPosition.Width}x{ScreenPosition.Height}]";
     }
 }

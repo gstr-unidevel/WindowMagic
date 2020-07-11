@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using ManagedWinapi.Windows;
 using Microsoft.Extensions.Logging;
@@ -253,45 +254,17 @@ namespace WindowMagic.Common
                     {
                         if (hasWindowChanged(applications, window, out ApplicationDisplayMetrics curDisplayMetrics))
                         {
-                            updateApps.Add(curDisplayMetrics);
-                            var log = string.Format("Captured {0,-8} at ({1}, {2}) of size {3} x {4} V:{5} {6} ",
-                                curDisplayMetrics,
-                                curDisplayMetrics.ScreenPosition.Left,
-                                curDisplayMetrics.ScreenPosition.Top,
-                                curDisplayMetrics.ScreenPosition.Width,
-                                curDisplayMetrics.ScreenPosition.Height,
-                                window.Visible,
-                                window.Title
-                                );
-
-                            var log2 = string.Format("\n    WindowPlacement.NormalPosition at ({0}, {1}) of size {2} x {3}",
-                                curDisplayMetrics.WindowPlacement.NormalPosition.Left,
-                                curDisplayMetrics.WindowPlacement.NormalPosition.Top,
-                                curDisplayMetrics.WindowPlacement.NormalPosition.Width,
-                                curDisplayMetrics.WindowPlacement.NormalPosition.Height
-                                );
-
-                            updateLogs.Add(log + log2);
+                            updateApps.Add(curDisplayMetrics);                            
+                            _logger.LogTrace($"[{window.Title}][{(window.Visible ? "V" : "H")}] {curDisplayMetrics.ToString()}");
                         }
                     }
-
-                    _logger?.LogTrace("{0}Capturing windows for display setting {1}", initialCapture ? "Initial " : "", desktopKey);
-
-                    var commitUpdateLog = new List<string>();
 
                     for (var i = 0; i < updateApps.Count; i++)
                     {
                         var curDisplayMetrics = updateApps[i];
-                        commitUpdateLog.Add(updateLogs[i]);
 
                         if (applications.TryGetValue(curDisplayMetrics.Key, out var appMetrics))
                         {
-                            /*
-                            // partially update Normal position part of WindowPlacement
-                            WindowPlacement wp = monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement;
-                            wp.NormalPosition = curDisplayMetrics.WindowPlacement.NormalPosition;
-                            monitorApplications[displayKey][curDisplayMetrics.Key].WindowPlacement = wp;
-                            */
                             appMetrics.WindowPlacement = curDisplayMetrics.WindowPlacement;
                             appMetrics.ScreenPosition = curDisplayMetrics.ScreenPosition;
                         }
@@ -300,8 +273,6 @@ namespace WindowMagic.Common
                             applications.Add(curDisplayMetrics.Key, curDisplayMetrics);
                         }
                     }
-
-                    _logger?.LogTrace("{0}{1}{2} windows captured", string.Join(Environment.NewLine, commitUpdateLog), Environment.NewLine, commitUpdateLog.Count);
 
                     _logger?.LogInformation($"Capture applications for desktop '{desktopKey}' completed.");
                 }
@@ -341,7 +312,7 @@ namespace WindowMagic.Common
                 {
                     // key collision between dead window and new window with the same hwnd
 
-                    _logger?.LogWarning($"Window ProcessId has changed from {prevDisplayMetrics.ProcessId } to {curDisplayMetrics.ProcessId}. Removing from known positions collection.");
+                    _logger?.LogWarning($"Window ProcessId has changed from {prevDisplayMetrics.ProcessId} to {curDisplayMetrics.ProcessId}. Removing from known positions collection.");
 
                     prevDisplayMetricsCollection.Remove(curDisplayMetrics.Key);
                     needUpdate = true;
@@ -447,41 +418,44 @@ namespace WindowMagic.Common
                             {
                                 _logger?.LogInformation($"Restore position for '{applicationKey}' started.");
 
-                                if (hasWindowChanged(applications, window, out ApplicationDisplayMetrics curDisplayMetrics))
+                                if (hasWindowChanged(applications, window, out var _))
                                 {
                                     var windowPlacement = prevDisplayMetrics.WindowPlacement;
+
+                                    bool success;
 
                                     // SetWindowPlacement will "place" the window on the correct screen based on its normal position.
                                     // If the state isn't "normal/restored" the window will appear not to actually move. To solve this
                                     // either a quick switch from 'restore' to whatever the target state is, or using another API
                                     // to position the window.
-                                    bool success;
+
                                     if (windowPlacement.ShowCmd != ShowWindowCommands.Normal)
                                     {
                                         var prevCmd = windowPlacement.ShowCmd;
+
                                         windowPlacement.ShowCmd = ShowWindowCommands.Normal;
                                         success = checkWin32Error(User32.SetWindowPlacement(window.HWnd, ref windowPlacement));
                                         windowPlacement.ShowCmd = prevCmd;
 
-                                        _logger?.LogTrace("Toggling to normal window state for: ({0} [{1}x{2}]-[{3}x{4}]) - {5}",
+                                        _logger?.LogTrace("Toggling to normal window state for: ({0}/{6} [{1}x{2}]-[{3}x{4}]) - {5}",
                                             window.Process.ProcessName,
                                             windowPlacement.NormalPosition.Left,
                                             windowPlacement.NormalPosition.Top,
                                             windowPlacement.NormalPosition.Width,
                                             windowPlacement.NormalPosition.Height,
-                                            success);
+                                            success, windowPlacement.ShowCmd.ToString());
                                     }
 
                                     // Set final window placement data - sets "normal" position for all windows (used for de-snapping and screen ID'ing)
                                     success = checkWin32Error(User32.SetWindowPlacement(window.HWnd, ref windowPlacement));
 
-                                    _logger?.LogTrace("SetWindowPlacement({0} [{1}x{2}]-[{3}x{4}]) - {5}",
+                                    _logger?.LogTrace("SetWindowPlacement({0}/{6} [{1}x{2}]-[{3}x{4}]) - {5}",
                                         window.Process.ProcessName,
                                         windowPlacement.NormalPosition.Left,
                                         windowPlacement.NormalPosition.Top,
                                         windowPlacement.NormalPosition.Width,
                                         windowPlacement.NormalPosition.Height,
-                                        success);
+                                        success, windowPlacement.ShowCmd.ToString());
 
                                     // For any windows not maximized or minimized, they might be snapped. This will place them back in their current snapped positions.
                                     // (Remember: NormalPosition is used when the user wants to *restore* from the snapped position when dragging)
@@ -496,16 +470,15 @@ namespace WindowMagic.Common
                                             rect.Top,
                                             rect.Width,
                                             rect.Height,
-                                            (uint)(SetWindowPosFlags.IgnoreZOrder
-                                                   | SetWindowPosFlags.AsynchronousWindowPosition));
+                                            (uint)(SetWindowPosFlags.IgnoreZOrder | SetWindowPosFlags.AsynchronousWindowPosition));
 
-                                        _logger?.LogTrace("Restoring position of non maximized/minimized window: SetWindowPos({0} [{1}x{2}]-[{3}x{4}]) - {5}",
+                                        _logger?.LogTrace("Restoring position of non maximized/minimized window: SetWindowPos({0}/{6} [{1}x{2}]-[{3}x{4}]) - {5}",
                                             window.Process.ProcessName,
                                             rect.Left,
                                             rect.Top,
                                             rect.Width,
                                             rect.Height,
-                                            success);
+                                            success, windowPlacement.ShowCmd.ToString());
 
                                         checkWin32Error(success);
                                     }
