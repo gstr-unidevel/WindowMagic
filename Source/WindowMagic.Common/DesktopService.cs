@@ -27,7 +27,7 @@ namespace WindowMagic.Common
         {
             var displayCodes = from d in GetDesktopDisplays()
                                orderby d.Left, d.Top
-                               select $"{d.DeviceName};{d.Left};{d.Top};{d.ScreenWidth};{d.ScreenHeight}";
+                               select $"{d.Left};{d.Top};{d.ScreenWidth};{d.ScreenHeight}";
 
             var desktopKey = String.Join("|", displayCodes);
 
