@@ -22,7 +22,7 @@ namespace WindowMagic.Common
         private readonly Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>> _monitorApplications = new Dictionary<string, SortedDictionary<string, ApplicationDisplayMetrics>>();
 
         private readonly object _displayChangeLock = new object();
-
+        private readonly IDesktopDisplayMetricsService _desktopDisplayMetricsService;
         private readonly IStateDetector _stateDetector;
         private readonly IWindowPositionService _windowPositionService;
         private readonly ILogger<PersistentWindowProcessor> _logger;
@@ -37,8 +37,9 @@ namespace WindowMagic.Common
         /// </summary>
         private bool _ignoreCaptureRequests = false;
 
-        public PersistentWindowProcessor(IStateDetector stateDetector, IWindowPositionService windowPositionService, ILogger<PersistentWindowProcessor> logger)
+        public PersistentWindowProcessor(IDesktopDisplayMetricsService desktopDisplayMetricsService, IStateDetector stateDetector, IWindowPositionService windowPositionService, ILogger<PersistentWindowProcessor> logger)
         {
+            _desktopDisplayMetricsService = desktopDisplayMetricsService ?? throw new ArgumentNullException(nameof(desktopDisplayMetricsService));
             _stateDetector = stateDetector ?? throw new ArgumentNullException(nameof(stateDetector));
             _windowPositionService = windowPositionService ?? throw new ArgumentNullException(nameof(windowPositionService));
             _logger = logger;
@@ -55,6 +56,13 @@ namespace WindowMagic.Common
             captureApplicationsOnCurrentDisplays(initialCapture: true);
 
             attachEventHandlers();
+        }
+
+        public void Stop()
+        {
+            detachEventHandlers();
+
+            _delayedCaptureTimer.Change(Timeout.Infinite, Timeout.Infinite);
         }
 
         private void attachEventHandlers()
@@ -214,7 +222,7 @@ namespace WindowMagic.Common
             {
                 if (displayKey == null)
                 {
-                    DesktopDisplayMetrics metrics = DesktopDisplayMetrics.AcquireMetrics();
+                    var metrics = _desktopDisplayMetricsService.AcquireMetrics();
                     displayKey = metrics.Key;
                 }
 
@@ -395,7 +403,7 @@ namespace WindowMagic.Common
             {
                 if (displayKey == null)
                 {
-                    DesktopDisplayMetrics metrics = DesktopDisplayMetrics.AcquireMetrics();
+                    var metrics = _desktopDisplayMetricsService.AcquireMetrics();
                     displayKey = metrics.Key;
                 }
 

@@ -30,6 +30,7 @@ namespace WindowMagic.SystrayShell
 #endif
                 })
                 .AddSingleton<IStateDetector, StateDetector>()
+                .AddSingleton<IDesktopDisplayMetricsService, DesktopDisplayMetricsService>()
                 .AddSingleton<IWindowPositionService, WindowPositionService>()
                 .AddSingleton<PersistentWindowProcessor>()
                 ;

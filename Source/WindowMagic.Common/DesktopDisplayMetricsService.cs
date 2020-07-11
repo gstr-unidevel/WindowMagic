@@ -2,7 +2,7 @@
 using System.Linq;
 using WindowMagic.Common.WinApiBridge;
 
-namespace WindowMagic.Common.Models
+namespace WindowMagic.Common
 {
     public class DesktopDisplayMetrics
     {
@@ -24,19 +24,6 @@ namespace WindowMagic.Common.Models
             }
         }
 
-        public static DesktopDisplayMetrics AcquireMetrics()
-        {
-            DesktopDisplayMetrics metrics = new DesktopDisplayMetrics();
-
-            var displays = Display.GetDisplays();
-            int displayId = 0;
-            foreach (var display in displays)
-            {
-                metrics.SetMonitor(displayId++, display);
-            }
-            return metrics;
-        }
-
         private readonly Dictionary<int, Display> _monitorResolutions = new Dictionary<int, Display>();
 
         private void buildKey()
@@ -47,10 +34,9 @@ namespace WindowMagic.Common.Models
             {
                 keySegments.Add(string.Format("[DeviceName:{0} Loc:{1}x{2} Res:{3}x{4}]", entry.Value.DeviceName, entry.Value.Left, entry.Value.Top, entry.Value.ScreenWidth, entry.Value.ScreenHeight));
             }
-            
+
             Key = string.Join(",", keySegments);
         }
-
 
         public override bool Equals(object obj)
         {
@@ -67,6 +53,29 @@ namespace WindowMagic.Common.Models
         public int GetHashCode(DesktopDisplayMetrics obj)
         {
             return obj.Key.GetHashCode();
+        }
+    }
+
+    public interface IDesktopDisplayMetricsService
+    {
+        DesktopDisplayMetrics AcquireMetrics();
+    }
+
+    public class DesktopDisplayMetricsService : IDesktopDisplayMetricsService
+    {
+        public DesktopDisplayMetrics AcquireMetrics()
+        {
+            var metrics = new DesktopDisplayMetrics();
+
+            var displays = Display.GetDisplays();
+            int displayId = 0;
+
+            foreach (var display in displays)
+            {
+                metrics.SetMonitor(displayId++, display);
+            }
+
+            return metrics;
         }
     }
 }

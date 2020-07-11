@@ -18,6 +18,9 @@ namespace WindowMagic.SystrayShell
         {
             this.notifyIconMain.Visible = false;
             this.notifyIconMain.Icon = null;
+
+            this.pwp.Stop();
+
             Application.Exit();
         }
 
