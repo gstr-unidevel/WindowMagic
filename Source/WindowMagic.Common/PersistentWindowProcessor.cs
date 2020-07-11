@@ -51,6 +51,11 @@ namespace WindowMagic.Common
             });
         }
 
+        ~PersistentWindowProcessor()
+        {
+            Dispose(false);
+        }
+
         public void Start()
         {
             captureApplicationsOnCurrentDisplays(initialCapture: true);
@@ -138,6 +143,7 @@ namespace WindowMagic.Common
                     _logger?.LogInformation("System Resuming");
                     _ignoreCaptureRequests = true;
                     cancelDelayedCapture(); // Throw away any pending captures
+
                     beginRestoreApplicationsOnCurrentDisplays();
                     break;
 
@@ -152,12 +158,12 @@ namespace WindowMagic.Common
             if (args.Reason == SessionSwitchReason.SessionLock)
             {
                 _logger?.LogTrace("Session locked");
-                this._isSessionLocked = true;
+                _isSessionLocked = true;
             }
             else if (args.Reason == SessionSwitchReason.SessionUnlock)
             {
                 _logger?.LogTrace("Session unlocked");
-                this._isSessionLocked = false;
+                _isSessionLocked = false;
             }
         }
 
@@ -179,7 +185,7 @@ namespace WindowMagic.Common
             }
 
             _logger?.LogTrace("Delayed capture timer restarted");
-            this._delayedCaptureTimer.Change(DELAYED_CAPTURE_TIME, Timeout.Infinite);
+            _delayedCaptureTimer.Change(DELAYED_CAPTURE_TIME, Timeout.Infinite);
         }
 
         /// <summary>
@@ -195,7 +201,7 @@ namespace WindowMagic.Common
 
         private void beginCaptureApplicationsOnCurrentDisplays()
         {
-            if (!this.isCaptureAllowed())
+            if (!isCaptureAllowed())
             {
                 _logger?.LogTrace("Ignoring capture request... IsCaptureAllowed() returned false");
                 return;
@@ -208,10 +214,12 @@ namespace WindowMagic.Common
                     captureApplicationsOnCurrentDisplays();
                 });
             })
+
             {
                 IsBackground = true,
                 Name = "PersistentWindowProcessor.BeginCaptureApplicationsOnCurrentDisplays()"
             };
+
             thread.Start();
 
         }
@@ -224,11 +232,12 @@ namespace WindowMagic.Common
 
                 if (!_monitorApplications.ContainsKey(desktopKey))
                 {
+                    _logger.LogInformation($"New desktop with DesktopKey '{desktopKey}' has been identified.");
                     _monitorApplications.Add(desktopKey, new SortedDictionary<string, ApplicationDisplayMetrics>());
                 }
 
-                List<string> updateLogs = new List<string>();
-                List<ApplicationDisplayMetrics> updateApps = new List<ApplicationDisplayMetrics>();
+                var updateLogs = new List<string>();
+                var updateApps = new List<ApplicationDisplayMetrics>();
                 var appWindows =  _windowService.CaptureWindowsOfInterest();
                 
                 foreach (var window in appWindows)
@@ -483,6 +492,7 @@ namespace WindowMagic.Common
                                 rect.Width,
                                 rect.Height,
                                 success);
+
                             checkWin32Error(success);
                         }
                     }
@@ -512,11 +522,6 @@ namespace WindowMagic.Common
 
                 _isDisposed = true;
             }
-        }
-
-        ~PersistentWindowProcessor()
-        {
-            Dispose(false);
         }
 
         void IDisposable.Dispose()
