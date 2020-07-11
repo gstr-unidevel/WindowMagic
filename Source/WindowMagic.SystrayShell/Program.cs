@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 using WindowMagic.Common;
@@ -27,6 +28,12 @@ namespace WindowMagic.SystrayShell
 #if DEBUG
                     options.AddDebug(); 
                     options.SetMinimumLevel(LogLevel.Trace);
+#else
+                    if ((from a in args where a == "--debug" select a).Count()>0)
+                    {
+                        options.AddFile();
+                        options.SetMinimumLevel(LogLevel.Trace);
+                    }
 #endif
                 })
                 .AddSingleton<IStateDetector, StateDetector>()
