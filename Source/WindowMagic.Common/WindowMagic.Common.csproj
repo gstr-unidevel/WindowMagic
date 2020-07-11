@@ -89,7 +89,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StateDetector.cs" />
     <Compile Include="WinApiBridge\CallWindowProcedureParam.cs" />
-    <Compile Include="WinApiBridge\Display.cs" />
+    <Compile Include="DisplayService.cs" />
     <Compile Include="WinApiBridge\DwmApi.cs" />
     <Compile Include="WinApiBridge\MonitorInfo.cs" />
     <Compile Include="WinApiBridge\SetWindowPosFlags.cs" />

@@ -6,20 +6,20 @@ namespace WindowMagic.SystrayShell
 {
     public partial class SystrayForm : Form
     {
-        private readonly PersistentWindowProcessor pwp;
+        private readonly PersistentWindowProcessor _pwp;
 
         public SystrayForm(PersistentWindowProcessor pwp)
         {
-            this.pwp = pwp;
+            this._pwp = pwp;
             InitializeComponent();
         }
 
-        private void ExitToolStripMenuItemClickHandler(object sender, EventArgs e)
+        private void exitToolStripMenuItemClickHandler(object sender, EventArgs e)
         {
             this.notifyIconMain.Visible = false;
             this.notifyIconMain.Icon = null;
 
-            this.pwp.Stop();
+            this._pwp.Stop();
 
             Application.Exit();
         }

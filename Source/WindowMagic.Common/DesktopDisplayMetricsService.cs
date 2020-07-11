@@ -63,11 +63,18 @@ namespace WindowMagic.Common
 
     public class DesktopDisplayMetricsService : IDesktopDisplayMetricsService
     {
+        private readonly IDisplayService _displayService;
+
+        public DesktopDisplayMetricsService(IDisplayService displayService)
+        {
+            _displayService = displayService ?? throw new System.ArgumentNullException(nameof(displayService));
+        }
+
         public DesktopDisplayMetrics AcquireMetrics()
         {
             var metrics = new DesktopDisplayMetrics();
 
-            var displays = Display.GetDisplays();
+            var displays = _displayService.GetDisplays();
             int displayId = 0;
 
             foreach (var display in displays)

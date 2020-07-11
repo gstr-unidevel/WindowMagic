@@ -57,7 +57,7 @@ namespace WindowMagic.SystrayShell
             this.exitToolStripMenuItem.Name = "exitToolStripMenuItem";
             this.exitToolStripMenuItem.Size = new System.Drawing.Size(135, 22);
             this.exitToolStripMenuItem.Text = "E&xit";
-            this.exitToolStripMenuItem.Click += new System.EventHandler(this.ExitToolStripMenuItemClickHandler);
+            this.exitToolStripMenuItem.Click += new System.EventHandler(this.exitToolStripMenuItemClickHandler);
             // 
             // SystrayForm
             // 
