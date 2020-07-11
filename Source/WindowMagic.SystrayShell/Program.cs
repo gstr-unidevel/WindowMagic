@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Threading;
 using System.Windows.Forms;
 using WindowMagic.Common;
@@ -26,8 +29,20 @@ namespace WindowMagic.SystrayShell
             }
 #endif
 
-            using (PersistentWindowProcessor pwp = new PersistentWindowProcessor())
+            IConfiguration configuration = new ConfigurationBuilder()
+                .Build();
+
+            IServiceCollection services = new ServiceCollection();
+            services
+                .AddSingleton<IConfiguration>(configuration)
+                .AddLogging(options => options.AddDebug())
+                .AddSingleton<IStateDetector, StateDetector>()
+                .AddSingleton<PersistentWindowProcessor>()
+                ;
+
+            using (var serviceProvider = services.BuildServiceProvider())
             {
+                var pwp = serviceProvider.GetService<PersistentWindowProcessor>();
                 pwp.Start();
 
                 Application.EnableVisualStyles();

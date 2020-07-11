@@ -2,15 +2,26 @@
 using System.Collections.Generic;
 using System.Threading;
 using ManagedWinapi.Windows;
-using WindowMagic.Common.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace WindowMagic.Common
 {
-    internal static class StateDetector
+    public interface IStateDetector
+    {
+        void WaitForWindowStabilization(Action completeCallback, int additionalDelayInMs = 0);
+    }
+
+    public class StateDetector : IStateDetector
     {
         private const int StabilizationWaitInterval = 2500; // with value of 500 restoration started to early on some setups
+        private readonly ILogger<StateDetector> _logger;
 
-        public static void WaitForWindowStabilization(Action completeCallback, int additionalDelayInMs = 0)
+        public StateDetector(ILogger<StateDetector> logger)
+        {
+            _logger = logger;
+        }
+
+        public void WaitForWindowStabilization(Action completeCallback, int additionalDelayInMs = 0)
         {
             var previousLocations = new Dictionary<IntPtr, RECT>();
             var currentLocations = new Dictionary<IntPtr, RECT>();
@@ -23,7 +34,7 @@ namespace WindowMagic.Common
 
             while (true)
             {
-                Log.Trace("Windows not stable, waiting...");
+                _logger?.LogTrace("Windows not stable, waiting...");
                 //await Delay(100);
                 Thread.Sleep(StabilizationWaitInterval);
                 var windows = WindowHelper.CaptureWindowsOfInterest();
@@ -48,7 +59,7 @@ namespace WindowMagic.Common
             }
         }
 
-        private static void GetWindowLocations(Dictionary<IntPtr, RECT> placements, IEnumerable<SystemWindow> windows)
+        private void GetWindowLocations(Dictionary<IntPtr, RECT> placements, IEnumerable<SystemWindow> windows)
         {
             placements.Clear();
             foreach (var window in windows)
@@ -57,7 +68,7 @@ namespace WindowMagic.Common
             }
         }
 
-        private static bool DoLocationsMatch(Dictionary<IntPtr, RECT> previous, Dictionary<IntPtr, RECT> current)
+        private bool DoLocationsMatch(Dictionary<IntPtr, RECT> previous, Dictionary<IntPtr, RECT> current)
         {
             foreach (KeyValuePair<IntPtr, RECT> prevPlacement in previous)
             {
