@@ -322,21 +322,14 @@ namespace WindowMagic.Common
             var screenPosition = new RECT();
             User32.GetWindowRect(window.HWnd, ref screenPosition);
 
-            var threadId = User32.GetWindowThreadProcessId(window.HWnd, out uint processId);
+            User32.GetWindowThreadProcessId(window.HWnd, out uint processId);
 
             curDisplayMetrics = new ApplicationDisplayMetrics
             {
                 HWnd = window.HWnd,
-#if DEBUG
-                // these function calls are very cpu-intensive
-                ApplicationName = window.Process.ProcessName,
-#else
-                ApplicationName = String.Empty,
-#endif
                 ProcessId = processId,
-
+                ProcessName = window.Process.ProcessName,
                 WindowPlacement = windowPlacement,
-                RecoverWindowPlacement = true,
                 ScreenPosition = screenPosition
             };
 
@@ -446,7 +439,7 @@ namespace WindowMagic.Common
                         var procName = window.Process.ProcessName;
                         if (procName.Contains("CodeSetup")) continue; // prevent hang in SetWindowPlacement() (SFA: What's this about??? seems almost too specific!)
 
-                        var applicationKey = ApplicationDisplayMetrics.GetKey(window.HWnd, window.Process.ProcessName);
+                        var applicationKey = ApplicationDisplayMetrics.GetKey(window.HWnd, procName);
 
                         if (applications.TryGetValue(applicationKey, out var prevDisplayMetrics))
                         {
@@ -531,7 +524,7 @@ namespace WindowMagic.Common
                         }
                         else
                         {
-                            _logger?.LogInformation($"Restore position for '{applicationKey}' ignored, previous location found.");
+                            _logger?.LogInformation($"Restore position for '{applicationKey}' ignored, previous location not found.");
                         }
                     }
 
