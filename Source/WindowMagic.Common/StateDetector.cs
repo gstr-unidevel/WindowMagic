@@ -13,7 +13,8 @@ namespace WindowMagic.Common
 
     public class StateDetector : IStateDetector
     {
-        private const int StabilizationWaitInterval = 2500; // with value of 500 restoration started to early on some setups
+        private const int STABILIZATION_WAIT_INTERVAL = 2500; // with value of 500 restoration started to early on some setups
+        
         private readonly ILogger<StateDetector> _logger;
 
         public StateDetector(ILogger<StateDetector> logger)
@@ -36,7 +37,7 @@ namespace WindowMagic.Common
             {
                 _logger?.LogTrace("Windows not stable, waiting...");
                 //await Delay(100);
-                Thread.Sleep(StabilizationWaitInterval);
+                Thread.Sleep(STABILIZATION_WAIT_INTERVAL);
                 var windows = WindowHelper.CaptureWindowsOfInterest();
                 getWindowLocations(currentLocations, windows);
 

@@ -22,7 +22,7 @@ namespace WindowMagic.Common
         /// <summary>
         /// Stores list of events which will 
         /// </summary>
-        private readonly IEnumerable<User32Events> windowPositionChangedUser32Events = new User32Events[]
+        private readonly IEnumerable<User32Events> _windowPositionChangedUser32Events = new User32Events[]
         {
             User32Events.EVENT_SYSTEM_MOVESIZEEND, // Movement or resizing of a window has finished
             User32Events.EVENT_SYSTEM_FOREGROUND, // This seems to cover most moves involving snaps and minimize / restore
@@ -53,7 +53,7 @@ namespace WindowMagic.Common
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (!_disposedValue)
             {
                 if (disposing)
                 {
@@ -66,20 +66,20 @@ namespace WindowMagic.Common
 
                 // set large fields to null
 
-                disposedValue = true;
+                _disposedValue = true;
             }
         }
 
-        private readonly List<IntPtr> monitoredWinEventsHookHandles = new List<IntPtr>();
+        private readonly List<IntPtr> _monitoredWinEventsHookHandles = new List<IntPtr>();
         private readonly ILogger<WindowPositionService> _logger;
-        private bool disposedValue;
+        private bool _disposedValue;
 
         private void attachToSystemEvents()
         {
-            foreach (var user32Event in windowPositionChangedUser32Events)
+            foreach (var user32Event in _windowPositionChangedUser32Events)
             {
                 var winEventsHookHandle = User32.SetWinEventHook((uint)user32Event, (uint)user32Event, IntPtr.Zero, handleWindowPositionChanged, 0, 0, (uint)User32Events.WINEVENT_OUTOFCONTEXT);
-                monitoredWinEventsHookHandles.Add(winEventsHookHandle);
+                _monitoredWinEventsHookHandles.Add(winEventsHookHandle);
             }
 
             // Add other User32Events here and use monitoredWinEventsHookHandles to store handles. Modification
@@ -88,12 +88,12 @@ namespace WindowMagic.Common
 
         private void detachFromSystemEvents()
         {
-            foreach (var handle in monitoredWinEventsHookHandles)
+            foreach (var handle in _monitoredWinEventsHookHandles)
             {
                 User32.UnhookWinEvent(handle);
             }
 
-            monitoredWinEventsHookHandles.Clear();
+            _monitoredWinEventsHookHandles.Clear();
         }
 
         private void handleWindowPositionChanged(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
