@@ -29,7 +29,7 @@ namespace WindowMagic.Common
             if (previousLocations.Count == 0)
             {
                 var windows = WindowHelper.CaptureWindowsOfInterest();
-                GetWindowLocations(previousLocations, windows);
+                getWindowLocations(previousLocations, windows);
             }
 
             while (true)
@@ -38,9 +38,9 @@ namespace WindowMagic.Common
                 //await Delay(100);
                 Thread.Sleep(StabilizationWaitInterval);
                 var windows = WindowHelper.CaptureWindowsOfInterest();
-                GetWindowLocations(currentLocations, windows);
+                getWindowLocations(currentLocations, windows);
 
-                if (DoLocationsMatch(previousLocations, currentLocations))
+                if (doLocationsMatch(previousLocations, currentLocations))
                 {
                     if (additionalDelayInMs > 0)
                     {
@@ -59,7 +59,7 @@ namespace WindowMagic.Common
             }
         }
 
-        private void GetWindowLocations(Dictionary<IntPtr, RECT> placements, IEnumerable<SystemWindow> windows)
+        private void getWindowLocations(Dictionary<IntPtr, RECT> placements, IEnumerable<SystemWindow> windows)
         {
             placements.Clear();
             foreach (var window in windows)
@@ -68,7 +68,7 @@ namespace WindowMagic.Common
             }
         }
 
-        private bool DoLocationsMatch(Dictionary<IntPtr, RECT> previous, Dictionary<IntPtr, RECT> current)
+        private bool doLocationsMatch(Dictionary<IntPtr, RECT> previous, Dictionary<IntPtr, RECT> current)
         {
             foreach (KeyValuePair<IntPtr, RECT> prevPlacement in previous)
             {

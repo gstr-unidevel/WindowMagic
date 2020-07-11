@@ -7,8 +7,7 @@ using WindowMagic.Common.WinApiBridge;
 namespace WindowMagic.Common
 {
     static class WindowHelper
-    {
-        
+    {     
         public static IEnumerable<SystemWindow> CaptureWindowsOfInterest()
         {
             return SystemWindow.AllToplevelWindows
